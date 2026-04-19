@@ -23,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest_parser = subparsers.add_parser(
         "ingest-crypto-documents",
-        help="Ingest supported files from the crypto RAG directory into Onyx.",
+        help="Ingest supported files from the crypto RAG directory into FlowRAG.",
     )
     ingest_parser.add_argument(
         "--max-files-per-run",

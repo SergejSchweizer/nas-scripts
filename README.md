@@ -43,7 +43,7 @@ abstraction:
 - Command dispatcher: `src/nas_scripts/cli.py` routes a CLI command to the matching job.
 - Factory plus value object: each `config/*.py` module builds one immutable config object from environment variables.
 - Facade: each `jobs/*.py` module presents one job-level workflow and hides the helper calls underneath it.
-- Adapter: `src/nas_scripts/utils/onyx.py` translates local files into the Onyx API request shape.
+- Adapter: `src/nas_scripts/utils/onyx.py` translates local files into the FlowRAG API request shape.
 - Strategy hook: `ingest_crypto_documents.run_job(..., ingest_func=...)` lets tests or alternate callers swap the ingestion action.
 - Persistence layer: `src/nas_scripts/utils/state.py` owns the incremental ingestion state format.
 - Concurrency control: `src/nas_scripts/utils/locking.py` keeps overlapping cron runs from stepping on each other.
@@ -60,7 +60,8 @@ abstraction:
 - `tests/unit/<script_name>/`: unit tests grouped per script
 - `tests/integration/<script_name>/`: integration tests grouped per script
 - `tests/data/<script_name>/`: local test fixtures grouped per script and excluded from Git
-- `config/.env.example`: local environment template
+- `config/ingest_crypto_documents.env.example`: local configuration template
+- `config/ingest_crypto_documents.env`: local runtime configuration file, excluded from git
 
 ## Setup
 
@@ -73,10 +74,10 @@ pytest
 Run live integration tests only:
 
 ```powershell
-$env:RUN_LIVE_ONYX_TESTS="1"
-$env:ONYX_BASE_URL="http://your-onyx-host:3000"
-$env:ONYX_API_KEY="your-api-key"
-$env:ONYX_CC_PAIR_ID="3"
+$env:RUN_LIVE_FLOWRAG_TESTS="1"
+$env:FLOWRAG_BASE_URL="http://your-flowrag-host:18080"
+$env:FLOWRAG_API_KEY="your-api-key"
+$env:FLOWRAG_DATASET_ID="your-dataset-id"
 python -m pytest tests/integration -m "integration and live"
 ```
 
@@ -115,8 +116,11 @@ python scripts/ingest_crypto_documents.py --max-files-per-run 1
 python scripts/ingest_crypto_documents.py
 ```
 
-The ingest job defaults `ONYX_CC_PAIR_ID` to `3`, so you only need to override
-it if your Onyx instance uses a different pair id.
+The ingest job uploads into the FlowRAG dataset you point `FLOWRAG_DATASET_ID`
+at.
+
+The ingest job reads its runtime settings from `config/ingest_crypto_documents.env` by default. You can
+override that path with `INGEST_CONFIG_FILE` if needed.
 
 Media library sync:
 
@@ -203,13 +207,13 @@ Script
 ### `ingest_crypto_documents`
 
 Purpose:
-Ingest supported crypto RAG documents into Onyx from a configured scan directory.
+Ingest supported crypto RAG documents into FlowRAG from a configured scan directory.
 
 What this script does:
 
 - scans the configured crypto document folder for supported files
 - compares current files against the saved ingestion state
-- ingests only new or changed documents into Onyx
+- ingests only new or changed documents into FlowRAG
 - writes progress to a per-script log file
 - prevents overlapping runs with a lock file
 - limits each run to a configurable number of documents
@@ -231,17 +235,18 @@ Modules:
 Config:
 
 Required environment variables:
-- `ONYX_CC_PAIR_ID`
+- `FLOWRAG_DATASET_ID`
 
 Optional environment variables:
-- `ONYX_BASE_URL`
-- `ONYX_API_KEY`
+- `FLOWRAG_BASE_URL`
+- `FLOWRAG_API_KEY`
 - `SCAN_DIR`
 - `STATE_FILE`
 - `LOCK_FILE`
 - `LOG_DIR`
 - `MAX_FILES_PER_RUN`
 - `REQUEST_TIMEOUT`
+- `INGEST_CONFIG_FILE`
 
 Behavior:
 
@@ -288,7 +293,7 @@ apply MAX_FILES_PER_RUN limit
 extract text and build payload per file
   |
   v
-send document to Onyx ingestion API
+send document to FlowRAG document upload API
   |
   v
 save successful state
@@ -354,19 +359,19 @@ Testing:
 - Unit tests cover change detection between current files and saved state.
 - Unit tests cover payload and request header construction.
 - Unit tests cover job execution flow and state persistence.
-- Unit tests cover validation failure when `ONYX_CC_PAIR_ID` is missing.
+- Unit tests cover validation failure when `FLOWRAG_DATASET_ID` is missing.
 - Unit tests cover single-instance lock behavior.
 - Unit tests cover per-script log file creation and job log output.
 - Unit tests cover max-files-per-run throttling and zero-file runs.
 - Live integration test `tests/integration/ingest_crypto_documents/test_live.py` uses `tests/data/ingest_crypto_documents/09_Dergileva_Dobrynskaja_Gurov_Sokolova.pdf`.
-- The live test confirms extractable text, runs the real workflow against the Onyx API, and verifies local state updates.
+- The live test confirms the upload/parsing flow against the FlowRAG API and verifies local state updates.
 
 Current testing gaps:
 
 - concurrent lock behavior across multiple processes
 - retry behavior and partial-failure recovery
 - end-to-end execution on the real NAS scheduler
-- assertions against downstream indexed content inside Onyx after ingestion
+- assertions against downstream indexed content inside FlowRAG after ingestion
 
 ### `sync_media_library`
 

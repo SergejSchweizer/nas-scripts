@@ -5,30 +5,47 @@ from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 from nas_scripts.cli import main as cli_main
-from nas_scripts.config.ingest_crypto_documents import IngestCryptoDocumentsConfig
+from nas_scripts.config.ingest_crypto_documents import (
+    IngestCryptoDocumentsConfig,
+    load_ingest_crypto_documents_config,
+)
 from nas_scripts.jobs.ingest_crypto_documents import _partition_files, main, run_job
 from nas_scripts.utils.filesystem import FileRecord, collect_files
 from nas_scripts.utils.locking import AlreadyLockedError
 from nas_scripts.utils.logging import LOG_DATE_FORMAT, setup_script_logger
-from nas_scripts.utils.onyx import build_headers, build_payload
+from nas_scripts.utils.onyx import build_headers, trigger_parsing, upload_file
 from nas_scripts.utils.state import load_state
 
 
 JOB_MODULE = Path("src/nas_scripts/jobs/ingest_crypto_documents.py")
 
 
+class DummyLogger:
+    def info(self, *args, **kwargs) -> None:
+        return None
+
+    def warning(self, *args, **kwargs) -> None:
+        return None
+
+    def error(self, *args, **kwargs) -> None:
+        return None
+
+    def exception(self, *args, **kwargs) -> None:
+        return None
+
+
 def make_config(
-    tmp_path: Path, *, cc_pair_id: int | None = 3
+    tmp_path: Path, *, dataset_id: str | None = "dataset-123"
 ) -> IngestCryptoDocumentsConfig:
     scan_dir = tmp_path / "crypto"
     return IngestCryptoDocumentsConfig(
         script_name="ingest_crypto_documents",
-        onyx_base_url="http://localhost:3000",
-        onyx_api_key="token",
-        onyx_cc_pair_id=cc_pair_id,
+        flowrag_base_url="http://localhost:18080",
+        flowrag_api_key="token",
+        flowrag_dataset_id=dataset_id,
         scan_dir=scan_dir,
-        state_file=scan_dir / ".onyx_ingest_state.json",
-        lock_file=scan_dir / ".onyx_ingest.lock",
+        state_file=scan_dir / ".flowrag_ingest_state.json",
+        lock_file=scan_dir / ".flowrag_ingest.lock",
         log_dir=tmp_path / "logs",
         max_files_per_run=None,
         request_timeout=30,
@@ -45,7 +62,7 @@ def test_collect_files_filters_supported_extensions(tmp_path: Path) -> None:
     files = collect_files(
         root,
         supported_extensions={".txt", ".md"},
-        ignored_names={".onyx_ingest_state.json", ".onyx_ingest.lock"},
+        ignored_names={".flowrag_ingest_state.json", ".flowrag_ingest.lock"},
     )
 
     assert sorted(files) == ["README.md", "note.txt"]
@@ -101,20 +118,91 @@ def test_partition_files_separates_changed_records() -> None:
     assert changed == [("new.txt", current["new.txt"])]
 
 
-def test_build_payload_uses_relative_metadata(tmp_path: Path) -> None:
-    file_path = tmp_path / "market.md"
-    file_path.write_text("btc outlook", encoding="utf-8")
-
-    payload = build_payload(file_path, "market.md", cc_pair_id=7)
-
-    assert payload["cc_pair_id"] == 7
-    assert payload["document"]["id"] == "crypto::market.md"
-    assert payload["document"]["metadata"]["relative_path"] == "market.md"
-
-
 def test_build_headers_includes_bearer_token() -> None:
     assert build_headers("abc")["Authorization"] == "Bearer abc"
-    assert build_headers(None) == {"Content-Type": "application/json"}
+    assert build_headers(None) == {}
+
+
+def test_load_ingest_crypto_documents_config_reads_local_config_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_file = tmp_path / "config.env"
+    config_file.write_text(
+        "\n".join(
+            [
+                "FLOWRAG_BASE_URL=http://flowrag.local:18080",
+                "FLOWRAG_API_KEY=test-key",
+                "FLOWRAG_DATASET_ID=dataset-999",
+                "SCAN_DIR=/tmp/crypto",
+                "STATE_FILE=/tmp/crypto/state.json",
+                "LOCK_FILE=/tmp/crypto/lockfile",
+                "LOG_DIR=/tmp/logs",
+                "MAX_FILES_PER_RUN=7",
+                "REQUEST_TIMEOUT=12",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("INGEST_CONFIG_FILE", str(config_file))
+
+    config = load_ingest_crypto_documents_config()
+
+    assert config.flowrag_base_url == "http://flowrag.local:18080"
+    assert config.flowrag_api_key == "test-key"
+    assert config.flowrag_dataset_id == "dataset-999"
+    assert config.scan_dir == Path("/tmp/crypto")
+    assert config.state_file == Path("/tmp/crypto/state.json")
+    assert config.lock_file == Path("/tmp/crypto/lockfile")
+    assert config.log_dir == Path("/tmp/logs")
+    assert config.max_files_per_run == 7
+    assert config.request_timeout == 12
+
+
+def test_upload_file_returns_document_id(tmp_path: Path) -> None:
+    file_path = tmp_path / "market.md"
+    file_path.write_text("btc outlook", encoding="utf-8")
+    config = make_config(tmp_path)
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):  # type: ignore[no-untyped-def]
+            return {"code": 0, "data": {"id": "doc-123"}}
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def post(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            self.calls.append((args, kwargs))
+            return FakeResponse()
+
+    session = FakeSession()
+    assert upload_file(file_path, config=config, session=session) == "doc-123"
+    assert session.calls[0][1]["files"]["file"][0] == "market.md"
+
+
+def test_trigger_parsing_posts_document_ids() -> None:
+    config = make_config(Path("/tmp/test-flowrag"))
+
+    class FakeResponse:
+        status_code = 200
+
+        @property
+        def text(self) -> str:
+            return ""
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def post(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            self.calls.append((args, kwargs))
+            return FakeResponse()
+
+    session = FakeSession()
+    trigger_parsing("doc-123", config=config, session=session)
+    assert session.calls[0][1]["json"] == {"document_ids": ["doc-123"]}
 
 
 def test_run_job_ingests_changed_files_and_updates_state(tmp_path: Path) -> None:
@@ -138,12 +226,12 @@ def test_run_job_ingests_changed_files_and_updates_state(tmp_path: Path) -> None
     assert sorted(saved_state) == ["first.txt", "second.md"]
 
 
-def test_run_job_fails_when_cc_pair_id_missing(tmp_path: Path, capsys) -> None:
-    config = make_config(tmp_path, cc_pair_id=None)
+def test_run_job_fails_when_dataset_id_missing(tmp_path: Path, capsys) -> None:
+    config = make_config(tmp_path, dataset_id=None)
     config.scan_dir.mkdir(parents=True)
 
     assert run_job(config) == 1
-    assert "ONYX_CC_PAIR_ID is not set" in capsys.readouterr().err
+    assert "FLOWRAG_DATASET_ID is not set" in capsys.readouterr().err
 
 
 def test_main_exits_when_another_instance_holds_the_lock(
@@ -255,9 +343,9 @@ def test_run_job_limits_ingestion_to_max_files_per_run(tmp_path: Path) -> None:
     config = make_config(tmp_path)
     config = IngestCryptoDocumentsConfig(
         script_name=config.script_name,
-        onyx_base_url=config.onyx_base_url,
-        onyx_api_key=config.onyx_api_key,
-        onyx_cc_pair_id=config.onyx_cc_pair_id,
+        flowrag_base_url=config.flowrag_base_url,
+        flowrag_api_key=config.flowrag_api_key,
+        flowrag_dataset_id=config.flowrag_dataset_id,
         scan_dir=config.scan_dir,
         state_file=config.state_file,
         lock_file=config.lock_file,
@@ -315,9 +403,9 @@ def test_run_job_skips_ingestion_when_max_files_per_run_is_zero(
     config = make_config(tmp_path)
     config = IngestCryptoDocumentsConfig(
         script_name=config.script_name,
-        onyx_base_url=config.onyx_base_url,
-        onyx_api_key=config.onyx_api_key,
-        onyx_cc_pair_id=config.onyx_cc_pair_id,
+        flowrag_base_url=config.flowrag_base_url,
+        flowrag_api_key=config.flowrag_api_key,
+        flowrag_dataset_id=config.flowrag_dataset_id,
         scan_dir=config.scan_dir,
         state_file=config.state_file,
         lock_file=config.lock_file,

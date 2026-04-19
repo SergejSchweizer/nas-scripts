@@ -3,6 +3,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+import pytest
+
 from nas_scripts.cli import main as cli_main
 from nas_scripts.config.sync_media_library import SyncMediaLibraryConfig
 from nas_scripts.jobs.sync_media_library import (
@@ -49,6 +51,12 @@ class DummyLogger:
 
     def exception(self, *args, **kwargs):
         return None
+
+
+def _require_media_fixtures() -> Path:
+    if not MEDIA_FIXTURE_ROOT.exists():
+        pytest.skip("tests/data/sync_media_library is not present in this workspace.")
+    return MEDIA_FIXTURE_ROOT
 
 
 def test_collect_relative_media_files_filters_extensions(tmp_path: Path) -> None:
@@ -359,7 +367,8 @@ def test_filter_to_english_audio_and_subtitles_rejects_unverified_output(
 
 
 def test_collect_relative_media_files_uses_real_media_fixtures() -> None:
-    result = collect_relative_media_files(MEDIA_FIXTURE_ROOT, ("mkv", "mp4", "avi", "mpg"))
+    fixture_root = _require_media_fixtures()
+    result = collect_relative_media_files(fixture_root, ("mkv", "mp4", "avi", "mpg"))
 
     assert "09_Dergileva_Dobrynskaja_Gurov_Sokolova.pdf" not in result
     assert "Avatar.Fire.and.Ash.2025.x265.WEB-DL.2160p.HDR-DV.mkv" in result
@@ -371,9 +380,10 @@ def test_collect_relative_media_files_uses_real_media_fixtures() -> None:
 def test_sync_media_files_with_real_fixture_names_without_copying_large_files(
     tmp_path: Path, monkeypatch
 ) -> None:
+    fixture_root = _require_media_fixtures()
     config = SyncMediaLibraryConfig(
         script_name="sync_media_library",
-        source_dir=MEDIA_FIXTURE_ROOT,
+        source_dir=fixture_root,
         dest_dir=tmp_path / "dest",
         lock_file=tmp_path / "media.lock",
         log_dir=tmp_path / "logs",
@@ -408,11 +418,12 @@ def test_probe_streams_on_real_fixture_if_ffprobe_is_available() -> None:
     if not ffprobe_path:
         return
 
-    media_files = collect_relative_media_files(MEDIA_FIXTURE_ROOT, ("mkv",))
+    fixture_root = _require_media_fixtures()
+    media_files = collect_relative_media_files(fixture_root, ("mkv",))
     assert media_files, "Expected at least one MKV fixture in tests/data/sync_media_library"
 
     from nas_scripts.utils.media import probe_streams
 
-    streams = probe_streams(MEDIA_FIXTURE_ROOT / media_files[0])
+    streams = probe_streams(fixture_root / media_files[0])
 
     assert streams

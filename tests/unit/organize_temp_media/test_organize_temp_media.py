@@ -268,6 +268,12 @@ def test_organize_files_reorganizes_nested_files_when_enabled(tmp_path: Path) ->
     legacy_dir.mkdir()
     nested_photo = legacy_dir / "photo.jpg"
     nested_photo.write_text("jpg", encoding="utf-8")
+    expected_destination = build_destination_dir(
+        nested_photo,
+        temp_dir=config.temp_dir,
+        raw_extensions=config.raw_extensions,
+        video_extensions=config.video_extensions,
+    )
     logger = setup_script_logger(
         f"organize_temp_media_reorganize_nested_{tmp_path.name}",
         config.log_file,
@@ -275,7 +281,7 @@ def test_organize_files_reorganizes_nested_files_when_enabled(tmp_path: Path) ->
 
     assert organize_files(config, logger=logger) == 0
     assert not nested_photo.exists()
-    assert (config.temp_dir / "2021-04" / "img" / "photo.jpg").exists()
+    assert (expected_destination / "photo.jpg").exists()
 
 
 def test_main_can_override_reorganize_existing(monkeypatch, tmp_path: Path) -> None:

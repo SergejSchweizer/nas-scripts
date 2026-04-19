@@ -1,4 +1,4 @@
-"""Ingest crypto documents into Onyx.
+"""Ingest crypto documents into FlowRAG.
 
 This module is the workflow facade for the ingestion feature. It coordinates
 file discovery, incremental state tracking, locking, and API calls while
@@ -55,8 +55,14 @@ def run_job(
     """Run the ingestion facade once and return an exit status."""
     logger = logger or logging.getLogger(f"nas_scripts.{config.script_name}")
 
-    if config.onyx_cc_pair_id is None:
-        message = "Error: ONYX_CC_PAIR_ID is not set."
+    if config.flowrag_api_key is None:
+        message = "Error: FLOWRAG_API_KEY is not set."
+        print(message, file=sys.stderr)
+        logger.error(message)
+        return 1
+
+    if config.flowrag_dataset_id is None:
+        message = "Error: FLOWRAG_DATASET_ID is not set."
         print(message, file=sys.stderr)
         logger.error(message)
         return 1
@@ -68,9 +74,9 @@ def run_job(
         return 1
 
     print(f"Scanning: {config.scan_dir}")
-    print(f"Onyx endpoint: {config.ingest_endpoint}")
+    print(f"FlowRAG upload endpoint: {config.dataset_documents_endpoint}")
     logger.info("Scanning: %s", config.scan_dir)
-    logger.info("Onyx endpoint: %s", config.ingest_endpoint)
+    logger.info("FlowRAG upload endpoint: %s", config.dataset_documents_endpoint)
 
     previous_state = load_state(config.state_file)
     current_files = collect_files(
@@ -133,7 +139,7 @@ def main(*, max_files_per_run: int | None = None) -> int:
         config = replace(config, max_files_per_run=max_files_per_run)
     logger = setup_script_logger(config.script_name, config.log_file)
     logger.info("Starting %s", config.script_name)
-    if config.onyx_cc_pair_id is None or not config.scan_dir.exists():
+    if config.flowrag_dataset_id is None or not config.scan_dir.exists():
         return run_job(config, logger=logger)
     try:
         with FileLock(config.lock_file):

@@ -1,0 +1,4 @@
+# Keep dependency definitions in pyproject.toml.
+# This file stays up to date by installing the local project and its dev extras.
+-e .[dev]
+pytest>=8.0

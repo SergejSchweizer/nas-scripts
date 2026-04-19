@@ -1,0 +1,59 @@
+"""Cross-platform file lock helpers."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
+
+
+class AlreadyLockedError(RuntimeError):
+    """Raised when another process already holds the lock."""
+
+
+class FileLock:
+    def __init__(self, lock_path: Path) -> None:
+        self.lock_path = lock_path
+        self._handle = None
+
+    def acquire(self) -> "FileLock":
+        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = self.lock_path.open("a+")
+        try:
+            if os.name == "nt":
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            handle.seek(0)
+            handle.truncate()
+            handle.write(str(os.getpid()))
+            handle.flush()
+        except OSError as exc:
+            handle.close()
+            raise AlreadyLockedError(str(self.lock_path)) from exc
+        self._handle = handle
+        return self
+
+    def release(self) -> None:
+        if self._handle is None:
+            return
+        try:
+            if os.name == "nt":
+                self._handle.seek(0)
+                msvcrt.locking(self._handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(self._handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            self._handle.close()
+            self._handle = None
+
+    def __enter__(self) -> "FileLock":
+        return self.acquire()
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.release()

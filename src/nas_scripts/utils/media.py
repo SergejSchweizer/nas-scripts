@@ -126,6 +126,16 @@ def build_stream_map_args(streams: list[MediaStream]) -> list[str]:
     return map_args
 
 
+def format_audio_streams(streams: list[MediaStream]) -> str:
+    """Render audio streams for verification logs."""
+    audio_streams = [
+        f"{stream.index}:{stream.language or 'unknown'}"
+        for stream in streams
+        if stream.codec_type == "audio"
+    ]
+    return ", ".join(audio_streams) if audio_streams else "none"
+
+
 def filter_to_english_audio_and_subtitles(
     file_path: Path,
     *,
@@ -165,6 +175,13 @@ def filter_to_english_audio_and_subtitles(
         if logger is not None:
             logger.exception("ffprobe failed while verifying %s: %s", temp_file, exc)
         return False
+
+    if logger is not None:
+        logger.info(
+            "Verified audio tracks for %s: %s",
+            file_path,
+            format_audio_streams(verified_streams),
+        )
 
     remaining_non_english = find_non_english_audio_subtitle_streams(verified_streams)
     if remaining_non_english:

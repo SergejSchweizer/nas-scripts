@@ -20,6 +20,7 @@ from nas_scripts.utils.media import (
     collect_relative_media_files,
     find_non_english_audio_subtitle_streams,
     filter_to_english_audio_and_subtitles,
+    format_audio_streams,
 )
 
 MEDIA_FIXTURE_ROOT = Path("tests/data/sync_media_library")
@@ -381,6 +382,18 @@ def test_filter_to_english_audio_and_subtitles_verifies_output_before_replacing(
 
     assert file_path.read_text(encoding="utf-8") == "filtered"
     assert "Verified English-only audio/subtitle streams" in log_file.read_text(encoding="utf-8")
+    assert "Verified audio tracks for" in log_file.read_text(encoding="utf-8")
+
+
+def test_format_audio_streams_renders_audio_indexes_and_languages() -> None:
+    streams = [
+        MediaStream(index=0, codec_type="video", language=None),
+        MediaStream(index=1, codec_type="audio", language="eng"),
+        MediaStream(index=2, codec_type="audio", language=None),
+        MediaStream(index=3, codec_type="subtitle", language="en"),
+    ]
+
+    assert format_audio_streams(streams) == "1:eng, 2:unknown"
 
 
 def test_filter_to_english_audio_and_subtitles_rejects_unverified_output(

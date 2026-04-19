@@ -1,4 +1,8 @@
-"""Command-line entrypoints for NAS scripts."""
+"""Command-line entrypoints for NAS scripts.
+
+The CLI stays intentionally thin: it parses a command, maps it to a job
+module, and lets the job own the actual workflow and logging.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +14,7 @@ from nas_scripts.jobs.sync_media_library import main as sync_media_library_main
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the top-level argument parser for all NAS jobs."""
     parser = argparse.ArgumentParser(
         prog="nas-scripts",
         description="Python automation scripts for NAS workflows.",
@@ -20,7 +25,16 @@ def build_parser() -> argparse.ArgumentParser:
         "ingest-crypto-documents",
         help="Ingest supported files from the crypto RAG directory into Onyx.",
     )
-    ingest_parser.set_defaults(handler=lambda args: ingest_crypto_documents_main())
+    ingest_parser.add_argument(
+        "--max-files-per-run",
+        type=int,
+        help="Limit this run to the first N changed or new files.",
+    )
+    ingest_parser.set_defaults(
+        handler=lambda args: ingest_crypto_documents_main(
+            max_files_per_run=args.max_files_per_run,
+        )
+    )
 
     sync_parser = subparsers.add_parser(
         "sync-media-library",
@@ -47,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    """Parse CLI arguments and dispatch to the selected job."""
     parser = build_parser()
     args = parser.parse_args()
     handler = getattr(args, "handler", None)

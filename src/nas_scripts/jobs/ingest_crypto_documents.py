@@ -1,7 +1,15 @@
-"""Ingest crypto documents into Onyx."""
+"""Ingest crypto documents into Onyx.
+
+This module is the workflow facade for the ingestion feature. It coordinates
+file discovery, incremental state tracking, locking, and API calls while
+keeping the CLI and tests insulated from those details. The optional
+`ingest_func` parameter acts like a strategy hook for tests or alternate
+ingestion behavior.
+"""
 
 from __future__ import annotations
 
+from dataclasses import replace
 import logging
 import sys
 from pathlib import Path
@@ -24,6 +32,7 @@ def _partition_files(
     current_files: dict[str, FileRecord],
     previous_state: dict[str, dict[str, object]],
 ) -> tuple[dict[str, dict[str, object]], list[tuple[str, FileRecord]]]:
+    """Split files into the persisted state set and the ingest queue."""
     successful_state: dict[str, dict[str, object]] = {}
     changed_or_new: list[tuple[str, FileRecord]] = []
 
@@ -43,6 +52,7 @@ def run_job(
     ingest_func: Callable[[Path, str], None] | None = None,
     logger: logging.Logger | None = None,
 ) -> int:
+    """Run the ingestion facade once and return an exit status."""
     logger = logger or logging.getLogger(f"nas_scripts.{config.script_name}")
 
     if config.onyx_cc_pair_id is None:
@@ -116,8 +126,11 @@ def run_job(
     return 0
 
 
-def main() -> int:
+def main(*, max_files_per_run: int | None = None) -> int:
+    """Compose the ingestion workflow from config, logging, and locking."""
     config = load_ingest_crypto_documents_config()
+    if max_files_per_run is not None:
+        config = replace(config, max_files_per_run=max_files_per_run)
     logger = setup_script_logger(config.script_name, config.log_file)
     logger.info("Starting %s", config.script_name)
     if config.onyx_cc_pair_id is None or not config.scan_dir.exists():

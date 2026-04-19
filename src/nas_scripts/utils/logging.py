@@ -1,4 +1,9 @@
-"""Logging helpers for NAS jobs."""
+"""Logging helpers for NAS jobs.
+
+This shared module centralizes the cross-cutting logging concern: each job
+gets the same format, console output, weekly rotation, and retention policy so
+the workflow modules do not need to duplicate logger setup code.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +19,7 @@ LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 def setup_script_logger(script_name: str, log_file: Path) -> logging.Logger:
+    """Create the shared logger used by each job facade."""
     logger = logging.getLogger(f"nas_scripts.{script_name}")
     logger.setLevel(logging.INFO)
     logger.propagate = False

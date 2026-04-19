@@ -1,4 +1,9 @@
-"""Organize temporary image and media files into dated folders."""
+"""Organize temporary image and media files into dated folders.
+
+This module is the workflow facade for the organizer feature. It coordinates
+file discovery, routing, move operations, and optional ownership updates while
+the helper modules keep those lower-level concerns isolated.
+"""
 
 from __future__ import annotations
 
@@ -24,6 +29,7 @@ from nas_scripts.utils.logging import setup_script_logger
 
 
 def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -> int:
+    """Run the organizer facade once and return an exit status."""
     if not config.temp_dir.exists():
         message = f"Error: temp directory does not exist: {config.temp_dir}"
         print(message, file=sys.stderr)
@@ -91,6 +97,7 @@ def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -
 
 
 def main(*, reorganize_existing: bool | None = None) -> int:
+    """Compose the organizer workflow from config, logging, and locking."""
     config = load_organize_temp_media_config()
     if reorganize_existing is not None:
         config = replace(config, reorganize_existing=reorganize_existing)

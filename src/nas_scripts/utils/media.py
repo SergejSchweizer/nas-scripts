@@ -1,4 +1,9 @@
-"""Media-related helpers."""
+"""Media-related helpers.
+
+This module provides the stream-inspection and remuxing building blocks used
+by the media sync workflow. In design-pattern terms, it is the lower-level
+service layer behind the job facade.
+"""
 
 from __future__ import annotations
 
@@ -11,16 +16,20 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class MediaStream:
+    """A minimal stream record used by the media-filtering strategy."""
+
     index: int
     codec_type: str
     language: str | None
 
 
 def is_media_file(path: Path, extensions: tuple[str, ...]) -> bool:
+    """Decide whether a file should enter the media sync workflow."""
     return path.suffix.lower().lstrip(".") in {ext.lower() for ext in extensions}
 
 
 def collect_relative_media_files(root: Path, extensions: tuple[str, ...]) -> list[str]:
+    """Collect relative media paths for the destination-sync phase."""
     matches: list[str] = []
     for path in sorted(root.rglob("*")):
         if path.is_file() and is_media_file(path, extensions):
@@ -29,6 +38,7 @@ def collect_relative_media_files(root: Path, extensions: tuple[str, ...]) -> lis
 
 
 def collect_relative_files(root: Path) -> list[str]:
+    """Collect all destination files for stale-file comparison."""
     matches: list[str] = []
     for path in sorted(root.rglob("*")):
         if path.is_file():
@@ -37,11 +47,13 @@ def collect_relative_files(root: Path) -> list[str]:
 
 
 def copy_file_with_metadata(source: Path, destination: Path) -> None:
+    """Duplicate a media file while preserving its filesystem metadata."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
 
 
 def remove_empty_directories(root: Path) -> list[Path]:
+    """Prune empty directories after the sync and filtering steps."""
     removed: list[Path] = []
     for directory in sorted(
         (path for path in root.rglob("*") if path.is_dir()),
@@ -57,6 +69,7 @@ def remove_empty_directories(root: Path) -> list[Path]:
 
 
 def probe_streams(file_path: Path) -> list[MediaStream]:
+    """Inspect a media file so the filtering strategy can choose kept streams."""
     result = subprocess.run(
         [
             "ffprobe",
@@ -85,12 +98,14 @@ def probe_streams(file_path: Path) -> list[MediaStream]:
 
 
 def is_english_language(language: str | None) -> bool:
+    """Decide whether a language tag belongs to the English-only policy."""
     if language is None:
         return False
     return language.lower() in {"eng", "en"}
 
 
 def find_non_english_audio_subtitle_streams(streams: list[MediaStream]) -> list[int]:
+    """Identify streams that violate the English-only filtering policy."""
     indexes: list[int] = []
     for stream in streams:
         if stream.codec_type not in {"audio", "subtitle"}:
@@ -101,6 +116,7 @@ def find_non_english_audio_subtitle_streams(streams: list[MediaStream]) -> list[
 
 
 def build_stream_map_args(streams: list[MediaStream]) -> list[str]:
+    """Translate the filtering decision into ffmpeg mapping arguments."""
     map_args: list[str] = []
     for stream in streams:
         if stream.codec_type in {"audio", "subtitle"}:
@@ -116,6 +132,7 @@ def filter_to_english_audio_and_subtitles(
     ffmpeg_threads: int,
     logger: logging.Logger | None = None,
 ) -> bool:
+    """Apply the remuxing strategy and verify the output before replacing."""
     streams = probe_streams(file_path)
     map_args = build_stream_map_args(streams)
 
@@ -168,6 +185,7 @@ def filter_to_english_audio_and_subtitles(
 
 
 def remove_leftover_temp_files(root: Path) -> list[Path]:
+    """Clean up temporary files left behind by the remuxing workflow."""
     removed: list[Path] = []
     for path in root.rglob("temp.*"):
         if path.is_file():

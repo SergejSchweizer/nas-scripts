@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
@@ -65,9 +66,26 @@ def test_cli_runs_ingest_crypto_documents_command(monkeypatch) -> None:
     monkeypatch.setattr("sys.argv", ["nas-scripts", "ingest-crypto-documents"])
     monkeypatch.setattr(
         "nas_scripts.cli.ingest_crypto_documents_main",
-        lambda: 0,
+        lambda max_files_per_run=None: 0,
     )
     assert cli_main() == 0
+
+
+def test_cli_passes_max_files_per_run_to_ingest_job(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "sys.argv",
+        ["nas-scripts", "ingest-crypto-documents", "--max-files-per-run", "1"],
+    )
+    received: list[int | None] = []
+
+    def fake_main(*, max_files_per_run=None):  # type: ignore[no-untyped-def]
+        received.append(max_files_per_run)
+        return 0
+
+    monkeypatch.setattr("nas_scripts.cli.ingest_crypto_documents_main", fake_main)
+
+    assert cli_main() == 0
+    assert received == [1]
 
 
 def test_partition_files_separates_changed_records() -> None:
@@ -262,6 +280,33 @@ def test_run_job_limits_ingestion_to_max_files_per_run(tmp_path: Path) -> None:
     assert exit_code == 0
     assert ingested == ["a.txt", "b.txt"]
     assert sorted(saved_state) == ["a.txt", "b.txt"]
+
+
+def test_main_accepts_cli_override_for_max_files_per_run(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = make_config(tmp_path)
+    config.scan_dir.mkdir(parents=True)
+
+    monkeypatch.setattr(
+        "nas_scripts.jobs.ingest_crypto_documents.load_ingest_crypto_documents_config",
+        lambda: config,
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.ingest_crypto_documents.setup_script_logger",
+        lambda script_name, log_file: DummyLogger(),
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.ingest_crypto_documents.FileLock",
+        lambda lock_path: nullcontext(),
+    )
+
+    monkeypatch.setattr(
+        "nas_scripts.jobs.ingest_crypto_documents.run_job",
+        lambda cfg, logger=None: cfg.max_files_per_run,
+    )
+
+    assert main(max_files_per_run=1) == 1
 
 
 def test_run_job_skips_ingestion_when_max_files_per_run_is_zero(

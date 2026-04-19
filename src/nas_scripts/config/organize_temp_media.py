@@ -1,4 +1,8 @@
-"""Configuration for the organize_temp_media job."""
+"""Configuration for the organize_temp_media job.
+
+The organizer sorts temporary photos and videos into month-based folders and
+splits them into `raw/`, `img/`, and `vid/` subdirectories.
+"""
 
 from __future__ import annotations
 
@@ -40,6 +44,8 @@ DEFAULT_VIDEO_EXTENSIONS = ("mov", "MOV", "mp4", "MP4", "avi", "AVI", "3gp", "3G
 
 @dataclass(frozen=True)
 class OrganizeTempMediaConfig:
+    """Runtime settings for temporary media organization."""
+
     script_name: str
     temp_dir: Path
     lock_file: Path
@@ -53,10 +59,12 @@ class OrganizeTempMediaConfig:
 
     @property
     def log_file(self) -> Path:
+        """Return the per-script log file path."""
         return self.log_dir / f"{self.script_name}.log"
 
 
 def _parse_csv_env(value: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
+    """Parse a comma-separated environment variable into a tuple."""
     if not value:
         return default
     parts = [part.strip() for part in value.split(",") if part.strip()]
@@ -64,6 +72,7 @@ def _parse_csv_env(value: str | None, default: tuple[str, ...]) -> tuple[str, ..
 
 
 def _parse_bool_env(value: str | None, default: bool = False) -> bool:
+    """Parse a permissive boolean environment variable."""
     if value is None:
         return default
     normalized = value.strip().lower()
@@ -75,6 +84,7 @@ def _parse_bool_env(value: str | None, default: bool = False) -> bool:
 
 
 def load_organize_temp_media_config() -> OrganizeTempMediaConfig:
+    """Load organizer settings from environment variables."""
     return OrganizeTempMediaConfig(
         script_name="organize_temp_media",
         temp_dir=Path(os.environ.get("TEMP_DIR", str(DEFAULT_TEMP_DIR))),

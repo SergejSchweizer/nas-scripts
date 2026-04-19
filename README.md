@@ -22,6 +22,32 @@ Python automation scripts for a UGREEN NASync DXP4800 Plus.
 
 This repository is the Python home for NAS jobs such as ingestion, sync, backup, and media automation.
 
+## Code Map
+
+The code is organized so each concern has one clear home:
+
+- `src/nas_scripts/cli.py`: command-line parsing and job dispatch
+- `src/nas_scripts/__main__.py`: `python -m nas_scripts` entrypoint
+- `src/nas_scripts/config/`: environment-driven configuration objects
+- `src/nas_scripts/jobs/`: the actual job workflows
+- `src/nas_scripts/utils/`: reusable helpers for logging, locking, files, media, text, and API calls
+- `scripts/`: thin wrappers for users who prefer direct script execution
+
+Most jobs follow the same lifecycle: load config, create a per-script logger, take a lock, do the work, and write a clear completion or failure message.
+
+## Design Patterns
+
+The code deliberately uses a few simple patterns instead of a lot of framework
+abstraction:
+
+- Command dispatcher: `src/nas_scripts/cli.py` routes a CLI command to the matching job.
+- Factory plus value object: each `config/*.py` module builds one immutable config object from environment variables.
+- Facade: each `jobs/*.py` module presents one job-level workflow and hides the helper calls underneath it.
+- Adapter: `src/nas_scripts/utils/onyx.py` translates local files into the Onyx API request shape.
+- Strategy hook: `ingest_crypto_documents.run_job(..., ingest_func=...)` lets tests or alternate callers swap the ingestion action.
+- Persistence layer: `src/nas_scripts/utils/state.py` owns the incremental ingestion state format.
+- Concurrency control: `src/nas_scripts/utils/locking.py` keeps overlapping cron runs from stepping on each other.
+
 ## Project Layout
 
 - `src/nas_scripts/`: main Python package
@@ -84,8 +110,13 @@ Crypto RAG ingestion:
 
 ```powershell
 python -m nas_scripts ingest-crypto-documents
+python -m nas_scripts ingest-crypto-documents --max-files-per-run 1
+python scripts/ingest_crypto_documents.py --max-files-per-run 1
 python scripts/ingest_crypto_documents.py
 ```
+
+The ingest job defaults `ONYX_CC_PAIR_ID` to `3`, so you only need to override
+it if your Onyx instance uses a different pair id.
 
 Media library sync:
 
@@ -350,6 +381,7 @@ What this script does:
 - removes empty directories left after cleanup
 - inspects media streams with `ffprobe`
 - rewrites media files with `ffmpeg` so only English audio and English subtitle streams remain
+- stores a checksum cache so files that were already verified can be skipped on later runs
 - cleans up leftover temporary media files
 - writes progress to a per-script log file
 - prevents overlapping runs with a lock file

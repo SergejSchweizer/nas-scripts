@@ -1,4 +1,8 @@
-"""Text extraction helpers."""
+"""Text extraction helpers.
+
+These helpers turn PDFs and plain-text files into the extracted content used by
+the Onyx adapter. They are the content-extraction layer below the job facade.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +12,7 @@ from pypdf import PdfReader
 
 
 def extract_pdf_text(path: Path) -> str:
+    """Extract text from each PDF page for the document-ingestion flow."""
     reader = PdfReader(str(path))
     parts: list[str] = []
     for page in reader.pages:
@@ -18,6 +23,7 @@ def extract_pdf_text(path: Path) -> str:
 
 
 def extract_text(path: Path) -> str:
+    """Dispatch to the correct extraction strategy for the file type."""
     suffix = path.suffix.lower()
     if suffix == ".pdf":
         return extract_pdf_text(path)

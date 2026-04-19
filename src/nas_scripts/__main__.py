@@ -1,3 +1,5 @@
+"""Module entrypoint for ``python -m nas_scripts``."""
+
 from nas_scripts.cli import main
 
 

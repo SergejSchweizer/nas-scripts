@@ -1,4 +1,9 @@
-"""Cross-platform file lock helpers."""
+"""Cross-platform file lock helpers.
+
+This is the concurrency-control layer for the jobs. It keeps overlapping cron
+or manual runs from stepping on the same inputs, state files, or destination
+paths.
+"""
 
 from __future__ import annotations
 
@@ -16,11 +21,15 @@ class AlreadyLockedError(RuntimeError):
 
 
 class FileLock:
+    """A small cross-platform exclusive file lock for job coordination."""
+
     def __init__(self, lock_path: Path) -> None:
+        """Create a file lock that uses ``lock_path`` as the lock file."""
         self.lock_path = lock_path
         self._handle = None
 
     def acquire(self) -> "FileLock":
+        """Acquire the lock so the current job becomes the sole active run."""
         self.lock_path.parent.mkdir(parents=True, exist_ok=True)
         handle = self.lock_path.open("a+")
         try:
@@ -40,6 +49,7 @@ class FileLock:
         return self
 
     def release(self) -> None:
+        """Release the coordination lock and close the lock file handle."""
         if self._handle is None:
             return
         try:
@@ -53,7 +63,9 @@ class FileLock:
             self._handle = None
 
     def __enter__(self) -> "FileLock":
+        """Enter the context manager and acquire the lock."""
         return self.acquire()
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        """Exit the context manager and release the lock."""
         self.release()

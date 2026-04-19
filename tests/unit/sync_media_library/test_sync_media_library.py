@@ -31,6 +31,7 @@ def make_config(tmp_path: Path) -> SyncMediaLibraryConfig:
         dest_dir=tmp_path / "dest",
         lock_file=tmp_path / "media.lock",
         log_dir=tmp_path / "logs",
+        state_file=tmp_path / "logs" / "sync_media_library.state.json",
         extensions=("mpg", "avi", "mp4", "mkv"),
         ffmpeg_threads=1,
     )
@@ -201,7 +202,7 @@ def test_keep_only_english_audio_and_subtitles_updates_matching_files(
     filtered: list[Path] = []
     monkeypatch.setattr(
         "nas_scripts.jobs.sync_media_library.filter_to_english_audio_and_subtitles",
-        lambda file_path, ffmpeg_threads: filtered.append(file_path) or True,
+        lambda file_path, ffmpeg_threads, logger=None: filtered.append(file_path) or True,
     )
     monkeypatch.setattr(
         "nas_scripts.jobs.sync_media_library.remove_leftover_temp_files",
@@ -211,6 +212,52 @@ def test_keep_only_english_audio_and_subtitles_updates_matching_files(
     keep_only_english_audio_and_subtitles(config, logger=DummyLogger())
 
     assert filtered == [target]
+
+
+def test_keep_only_english_audio_and_subtitles_skips_verified_files(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = make_config(tmp_path)
+    config.dest_dir.mkdir(parents=True)
+    target = config.dest_dir / "movie.mkv"
+    target.write_text("media", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.collect_relative_media_files",
+        lambda root, extensions: ["movie.mkv"],
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.load_state",
+        lambda state_file: {"movie.mkv": {"sha256": "cached", "verified": True}},
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.sha256_file",
+        lambda path: "cached",
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.probe_streams",
+        lambda file_path: (_ for _ in ()).throw(AssertionError("probe should be skipped")),
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.filter_to_english_audio_and_subtitles",
+        lambda file_path, ffmpeg_threads, logger=None: (_ for _ in ()).throw(
+            AssertionError("ffmpeg should be skipped")
+        ),
+    )
+    saved_state: dict[str, dict[str, object]] = {}
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.save_state",
+        lambda state_file, state: saved_state.update(state),
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.remove_leftover_temp_files",
+        lambda root: [],
+    )
+
+    logger = DummyLogger()
+    keep_only_english_audio_and_subtitles(config, logger=logger)
+
+    assert saved_state == {"movie.mkv": {"sha256": "cached", "verified": True}}
 
 
 def test_filter_to_english_audio_and_subtitles_verifies_output_before_replacing(
@@ -330,6 +377,7 @@ def test_sync_media_files_with_real_fixture_names_without_copying_large_files(
         dest_dir=tmp_path / "dest",
         lock_file=tmp_path / "media.lock",
         log_dir=tmp_path / "logs",
+        state_file=tmp_path / "logs" / "sync_media_library.state.json",
         extensions=("mpg", "avi", "mp4", "mkv"),
         ffmpeg_threads=1,
     )

@@ -1,15 +1,24 @@
-"""Sync media files into the library and keep only English audio/subtitles."""
+"""Sync media files into the library and keep only English audio/subtitles.
+
+This module is the workflow facade for the media sync feature. It coordinates
+copying, stale-file cleanup, and stream filtering while the helper modules
+handle the filesystem, ffprobe, and ffmpeg details underneath. The filtering
+phase uses a checksum cache so already-verified files can be skipped on later
+runs.
+"""
 
 from __future__ import annotations
 
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 from nas_scripts.config.sync_media_library import (
     SyncMediaLibraryConfig,
     load_sync_media_library_config,
 )
+from nas_scripts.utils.filesystem import sha256_file
 from nas_scripts.utils.locking import AlreadyLockedError, FileLock
 from nas_scripts.utils.logging import setup_script_logger
 from nas_scripts.utils.media import (
@@ -24,6 +33,7 @@ from nas_scripts.utils.media import (
     remove_empty_directories,
     remove_leftover_temp_files,
 )
+from nas_scripts.utils.state import load_state, save_state
 
 
 def sync_media_files(
@@ -31,6 +41,7 @@ def sync_media_files(
     *,
     logger: logging.Logger,
 ) -> list[Path]:
+    """Run the copy-and-prune phase of the media sync facade."""
     source_files = collect_relative_media_files(config.source_dir, config.extensions)
     dest_files = collect_relative_files(config.dest_dir)
 
@@ -66,6 +77,9 @@ def keep_only_english_audio_and_subtitles(
     *,
     logger: logging.Logger,
 ) -> None:
+    """Run the post-copy filtering phase that preserves English tracks."""
+    previous_state = load_state(config.state_file)
+    next_state: dict[str, dict[str, Any]] = {}
     media_files = collect_relative_media_files(config.dest_dir, config.extensions)
     logger.info(
         "Checking %s media file(s) for non-English audio/subtitle streams.",
@@ -76,6 +90,12 @@ def keep_only_english_audio_and_subtitles(
         file_path = config.dest_dir / relpath
         if not is_media_file(file_path, config.extensions):
             continue
+        current_checksum = sha256_file(file_path)
+        previous = previous_state.get(relpath)
+        if previous is not None and previous.get("sha256") == current_checksum:
+            next_state[relpath] = previous
+            logger.info("Skipping already verified file: %s", file_path)
+            continue
         try:
             streams = probe_streams(file_path)
         except Exception as exc:  # noqa: BLE001
@@ -84,6 +104,10 @@ def keep_only_english_audio_and_subtitles(
 
         non_english_indexes = find_non_english_audio_subtitle_streams(streams)
         if not non_english_indexes:
+            next_state[relpath] = {
+                "sha256": current_checksum,
+                "verified": True,
+            }
             continue
 
         kept_map_count = len(build_stream_map_args(streams)) // 2
@@ -102,6 +126,10 @@ def keep_only_english_audio_and_subtitles(
             ffmpeg_threads=config.ffmpeg_threads,
             logger=logger,
         ):
+            next_state[relpath] = {
+                "sha256": sha256_file(file_path),
+                "verified": True,
+            }
             logger.info("Updated file: %s", file_path)
         else:
             logger.error("Failed to process %s", file_path)
@@ -109,8 +137,11 @@ def keep_only_english_audio_and_subtitles(
     for temp_file in remove_leftover_temp_files(config.dest_dir):
         logger.info("Removed leftover temp file: %s", temp_file)
 
+    save_state(config.state_file, next_state)
+
 
 def run_job(config: SyncMediaLibraryConfig, *, logger: logging.Logger) -> int:
+    """Run the media sync facade once and return an exit status."""
     if not config.source_dir.exists():
         message = f"Error: source directory does not exist: {config.source_dir}"
         print(message, file=sys.stderr)
@@ -131,6 +162,7 @@ def run_job(config: SyncMediaLibraryConfig, *, logger: logging.Logger) -> int:
 
 
 def main() -> int:
+    """Compose the media sync workflow from config, logging, and locking."""
     config = load_sync_media_library_config()
     logger = setup_script_logger(config.script_name, config.log_file)
     logger.info("Starting %s", config.script_name)

@@ -35,6 +35,20 @@ from nas_scripts.utils.media import (
 )
 from nas_scripts.utils.state import load_state, save_state
 
+FILTER_POLICY_VERSION = 2
+
+
+def _is_verified_cache_entry_valid(
+    previous: dict[str, Any] | None,
+    current_checksum: str,
+) -> bool:
+    """Decide whether a cached verification result still applies."""
+    if previous is None:
+        return False
+    if previous.get("sha256") != current_checksum:
+        return False
+    return previous.get("policy_version") == FILTER_POLICY_VERSION
+
 
 def sync_media_files(
     config: SyncMediaLibraryConfig,
@@ -92,10 +106,15 @@ def keep_only_english_audio_and_subtitles(
             continue
         current_checksum = sha256_file(file_path)
         previous = previous_state.get(relpath)
-        if previous is not None and previous.get("sha256") == current_checksum:
+        if _is_verified_cache_entry_valid(previous, current_checksum):
             next_state[relpath] = previous
             logger.info("Skipping already verified file: %s", file_path)
             continue
+        if previous is not None and previous.get("sha256") == current_checksum:
+            logger.info(
+                "Rechecking %s because the cached verification policy is outdated.",
+                file_path,
+            )
         try:
             streams = probe_streams(file_path)
         except Exception as exc:  # noqa: BLE001
@@ -107,6 +126,7 @@ def keep_only_english_audio_and_subtitles(
             next_state[relpath] = {
                 "sha256": current_checksum,
                 "verified": True,
+                "policy_version": FILTER_POLICY_VERSION,
             }
             continue
 
@@ -129,6 +149,7 @@ def keep_only_english_audio_and_subtitles(
             next_state[relpath] = {
                 "sha256": sha256_file(file_path),
                 "verified": True,
+                "policy_version": FILTER_POLICY_VERSION,
             }
             logger.info("Updated file: %s", file_path)
         else:

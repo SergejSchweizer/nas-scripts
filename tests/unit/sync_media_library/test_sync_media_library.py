@@ -236,7 +236,13 @@ def test_keep_only_english_audio_and_subtitles_skips_verified_files(
     )
     monkeypatch.setattr(
         "nas_scripts.jobs.sync_media_library.load_state",
-        lambda state_file: {"movie.mkv": {"sha256": "cached", "verified": True}},
+        lambda state_file: {
+            "movie.mkv": {
+                "sha256": "cached",
+                "verified": True,
+                "policy_version": 2,
+            }
+        },
     )
     monkeypatch.setattr(
         "nas_scripts.jobs.sync_media_library.sha256_file",
@@ -265,7 +271,67 @@ def test_keep_only_english_audio_and_subtitles_skips_verified_files(
     logger = DummyLogger()
     keep_only_english_audio_and_subtitles(config, logger=logger)
 
-    assert saved_state == {"movie.mkv": {"sha256": "cached", "verified": True}}
+    assert saved_state == {
+        "movie.mkv": {
+            "sha256": "cached",
+            "verified": True,
+            "policy_version": 2,
+        }
+    }
+
+
+def test_keep_only_english_audio_and_subtitles_reprocesses_outdated_cached_files(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = make_config(tmp_path)
+    config.dest_dir.mkdir(parents=True)
+    target = config.dest_dir / "movie.mkv"
+    target.write_text("media", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.collect_relative_media_files",
+        lambda root, extensions: ["movie.mkv"],
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.load_state",
+        lambda state_file: {
+            "movie.mkv": {
+                "sha256": "cached",
+                "verified": True,
+                "policy_version": 1,
+            }
+        },
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.sha256_file",
+        lambda path: "cached",
+    )
+
+    probe_calls: list[Path] = []
+
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.probe_streams",
+        lambda file_path: probe_calls.append(file_path) or [
+            MediaStream(index=0, codec_type="video", language=None),
+            MediaStream(index=1, codec_type="audio", language="eng"),
+            MediaStream(index=2, codec_type="audio", language="rus"),
+        ],
+    )
+
+    filtered: list[Path] = []
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.filter_to_english_audio_and_subtitles",
+        lambda file_path, ffmpeg_threads, logger=None: filtered.append(file_path) or True,
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.remove_leftover_temp_files",
+        lambda root: [],
+    )
+
+    keep_only_english_audio_and_subtitles(config, logger=DummyLogger())
+
+    assert probe_calls == [target]
+    assert filtered == [target]
 
 
 def test_filter_to_english_audio_and_subtitles_verifies_output_before_replacing(

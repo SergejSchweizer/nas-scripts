@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -113,6 +114,7 @@ def filter_to_english_audio_and_subtitles(
     file_path: Path,
     *,
     ffmpeg_threads: int,
+    logger: logging.Logger | None = None,
 ) -> bool:
     streams = probe_streams(file_path)
     map_args = build_stream_map_args(streams)
@@ -135,7 +137,32 @@ def filter_to_english_audio_and_subtitles(
     )
     if result.returncode != 0:
         temp_file.unlink(missing_ok=True)
+        if logger is not None:
+            logger.error("ffmpeg failed while filtering %s", file_path)
         return False
+
+    try:
+        verified_streams = probe_streams(temp_file)
+    except Exception as exc:  # noqa: BLE001
+        temp_file.unlink(missing_ok=True)
+        if logger is not None:
+            logger.exception("ffprobe failed while verifying %s: %s", temp_file, exc)
+        return False
+
+    remaining_non_english = find_non_english_audio_subtitle_streams(verified_streams)
+    if remaining_non_english:
+        temp_file.unlink(missing_ok=True)
+        if logger is not None:
+            logger.error(
+                "Verification failed for %s. Non-English stream(s) still present in output: %s",
+                file_path,
+                ",".join(str(index) for index in remaining_non_english),
+            )
+        return False
+
+    if logger is not None:
+        logger.info("Verified English-only audio/subtitle streams for %s", file_path)
+
     temp_file.replace(file_path)
     return True
 

@@ -100,6 +100,7 @@ def keep_only_english_audio_and_subtitles(
         if filter_to_english_audio_and_subtitles(
             file_path,
             ffmpeg_threads=config.ffmpeg_threads,
+            logger=logger,
         ):
             logger.info("Updated file: %s", file_path)
         else:

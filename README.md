@@ -385,6 +385,7 @@ Behavior:
 - Removes destination files that no longer exist in the source tree.
 - Deletes empty directories left behind in the destination tree.
 - Uses `ffprobe` to inspect streams and `ffmpeg` to keep only English audio and subtitle streams.
+- Verifies the rewritten file still contains only English audio and subtitle streams before replacing the original.
 - Cleans up leftover `temp.*` media files after processing.
 - Uses single-instance locking through `LOCK_FILE`.
 - Writes logs per script.

@@ -17,6 +17,7 @@ from nas_scripts.utils.media import (
     collect_relative_files,
     collect_relative_media_files,
     find_non_english_audio_subtitle_streams,
+    filter_to_english_audio_and_subtitles,
 )
 
 MEDIA_FIXTURE_ROOT = Path("tests/data/sync_media_library")
@@ -210,6 +211,104 @@ def test_keep_only_english_audio_and_subtitles_updates_matching_files(
     keep_only_english_audio_and_subtitles(config, logger=DummyLogger())
 
     assert filtered == [target]
+
+
+def test_filter_to_english_audio_and_subtitles_verifies_output_before_replacing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    file_path = tmp_path / "movie.mkv"
+    file_path.write_text("original", encoding="utf-8")
+    log_file = tmp_path / "logs" / "sync.log"
+    logger = setup_script_logger("sync_verify_success", log_file)
+
+    def fake_probe(path: Path) -> list[MediaStream]:
+        if path == file_path:
+            return [
+                MediaStream(index=0, codec_type="video", language=None),
+                MediaStream(index=1, codec_type="audio", language="eng"),
+                MediaStream(index=2, codec_type="audio", language="rus"),
+                MediaStream(index=3, codec_type="subtitle", language="spa"),
+            ]
+        temp_name = f"temp.{file_path.suffix.lstrip('.')}"
+        if path.name == temp_name:
+            return [
+                MediaStream(index=0, codec_type="video", language=None),
+                MediaStream(index=1, codec_type="audio", language="eng"),
+                MediaStream(index=3, codec_type="subtitle", language="en"),
+            ]
+        raise AssertionError(f"Unexpected path: {path}")
+
+    class Result:
+        returncode = 0
+
+    def fake_run(cmd, capture_output, text):  # type: ignore[no-untyped-def]
+        temp_path = Path(cmd[-1])
+        temp_path.write_text("filtered", encoding="utf-8")
+        return Result()
+
+    monkeypatch.setattr("nas_scripts.utils.media.probe_streams", fake_probe)
+    monkeypatch.setattr("nas_scripts.utils.media.subprocess.run", fake_run)
+
+    assert filter_to_english_audio_and_subtitles(
+        file_path,
+        ffmpeg_threads=1,
+        logger=logger,
+    )
+
+    for handler in logger.handlers:
+        handler.flush()
+
+    assert file_path.read_text(encoding="utf-8") == "filtered"
+    assert "Verified English-only audio/subtitle streams" in log_file.read_text(encoding="utf-8")
+
+
+def test_filter_to_english_audio_and_subtitles_rejects_unverified_output(
+    tmp_path: Path, monkeypatch
+) -> None:
+    file_path = tmp_path / "movie.mkv"
+    file_path.write_text("original", encoding="utf-8")
+    log_file = tmp_path / "logs" / "sync.log"
+    logger = setup_script_logger("sync_verify_failure", log_file)
+
+    def fake_probe(path: Path) -> list[MediaStream]:
+        if path == file_path:
+            return [
+                MediaStream(index=0, codec_type="video", language=None),
+                MediaStream(index=1, codec_type="audio", language="eng"),
+                MediaStream(index=2, codec_type="audio", language="rus"),
+                MediaStream(index=3, codec_type="subtitle", language="spa"),
+            ]
+        temp_name = f"temp.{file_path.suffix.lstrip('.')}"
+        if path.name == temp_name:
+            return [
+                MediaStream(index=0, codec_type="video", language=None),
+                MediaStream(index=1, codec_type="audio", language="eng"),
+                MediaStream(index=2, codec_type="audio", language="rus"),
+            ]
+        raise AssertionError(f"Unexpected path: {path}")
+
+    class Result:
+        returncode = 0
+
+    def fake_run(cmd, capture_output, text):  # type: ignore[no-untyped-def]
+        temp_path = Path(cmd[-1])
+        temp_path.write_text("filtered", encoding="utf-8")
+        return Result()
+
+    monkeypatch.setattr("nas_scripts.utils.media.probe_streams", fake_probe)
+    monkeypatch.setattr("nas_scripts.utils.media.subprocess.run", fake_run)
+
+    assert not filter_to_english_audio_and_subtitles(
+        file_path,
+        ffmpeg_threads=1,
+        logger=logger,
+    )
+
+    for handler in logger.handlers:
+        handler.flush()
+
+    assert file_path.read_text(encoding="utf-8") == "original"
+    assert "Verification failed for" in log_file.read_text(encoding="utf-8")
 
 
 def test_collect_relative_media_files_uses_real_media_fixtures() -> None:

@@ -13,7 +13,7 @@ from nas_scripts.jobs.ingest_crypto_documents import _partition_files, main, run
 from nas_scripts.utils.filesystem import FileRecord, collect_files
 from nas_scripts.utils.locking import AlreadyLockedError
 from nas_scripts.utils.logging import LOG_DATE_FORMAT, setup_script_logger
-from nas_scripts.utils.onyx import build_headers, trigger_parsing, upload_file
+from nas_scripts.utils.flowrag import build_headers, trigger_parsing, upload_file
 from nas_scripts.utils.state import load_state
 
 
@@ -21,6 +21,8 @@ JOB_MODULE = Path("src/nas_scripts/jobs/ingest_crypto_documents.py")
 
 
 class DummyLogger:
+    # These tests only care that the logger interface is accepted, not that
+    # messages are emitted somewhere real.
     def info(self, *args, **kwargs) -> None:
         return None
 
@@ -145,6 +147,8 @@ def test_load_ingest_crypto_documents_config_reads_local_config_file(
     )
     monkeypatch.setenv("INGEST_CONFIG_FILE", str(config_file))
 
+    # The loader should prefer the explicit config file path over defaults or
+    # any ambient process environment.
     config = load_ingest_crypto_documents_config()
 
     assert config.flowrag_base_url == "http://flowrag.local:18080"
@@ -173,6 +177,7 @@ def test_upload_file_returns_document_id(tmp_path: Path) -> None:
         def __init__(self) -> None:
             self.calls = []
 
+        # Capture the request so we can assert the multipart payload shape.
         def post(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             self.calls.append((args, kwargs))
             return FakeResponse()
@@ -196,6 +201,7 @@ def test_trigger_parsing_posts_document_ids() -> None:
         def __init__(self) -> None:
             self.calls = []
 
+        # Capture the request so we can assert the parse trigger body.
         def post(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             self.calls.append((args, kwargs))
             return FakeResponse()
@@ -215,6 +221,7 @@ def test_run_job_ingests_changed_files_and_updates_state(tmp_path: Path) -> None
 
     ingested: list[str] = []
 
+    # Inject a fake ingest function so the test stays local and deterministic.
     def fake_ingest(path: Path, rel_path: str) -> None:
         ingested.append(f"{rel_path}:{path.name}")
 
@@ -275,7 +282,7 @@ def test_setup_script_logger_writes_to_per_script_log_file(tmp_path: Path) -> No
     assert log_file.exists()
     assert "hello log" in log_file.read_text(encoding="utf-8")
     assert any(
-        isinstance(handler, TimedRotatingFileHandler) and handler.backupCount == 3
+        isinstance(handler, TimedRotatingFileHandler) and handler.backupCount == 0
         for handler in logger.handlers
     )
 

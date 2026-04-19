@@ -18,9 +18,8 @@ PDF_FIXTURE = Path(
 
 
 def _require_live_env() -> tuple[str, str, str]:
-    if os.environ.get("RUN_LIVE_FLOWRAG_TESTS") != "1" and os.environ.get(
-        "RUN_LIVE_ONYX_TESTS"
-    ) != "1":
+    if os.environ.get("RUN_LIVE_FLOWRAG_TESTS") != "1":
+        # Keep live coverage opt-in so normal test runs stay fast and safe.
         pytest.skip(
             "Set RUN_LIVE_FLOWRAG_TESTS=1 to enable live FlowRAG integration tests."
         )
@@ -51,6 +50,8 @@ def test_ingest_crypto_documents_pdf_against_real_flowrag_api(
 ) -> None:
     base_url, api_key, dataset_id = _require_live_env()
 
+    # The fixture proves the extractor works before we spend time on a live
+    # upload/parsing round-trip.
     assert PDF_FIXTURE.exists(), f"Missing PDF fixture: {PDF_FIXTURE}"
     assert extract_text(PDF_FIXTURE), "PDF fixture did not yield extractable text"
 

@@ -28,6 +28,8 @@ def _extract_document_id(response_json: Any) -> str | None:
     if not isinstance(response_json, dict):
         return None
 
+    # FlowRAG responses have varied across versions, so accept the common
+    # shapes we have seen instead of assuming one strict schema.
     data = response_json.get("data")
     if isinstance(data, dict):
         doc_id = data.get("id")
@@ -108,6 +110,9 @@ def ingest_file(
     session: requests.Session | None = None,
 ) -> None:
     """Upload a file to FlowRAG and trigger parsing."""
+    # The relative path is part of the job signature for testability and
+    # future metadata use, even though the FlowRAG upload itself only needs the
+    # file contents and filename today.
     _ = rel_path
     document_id = upload_file(path, config=config, session=session)
     trigger_parsing(document_id, config=config, session=session)

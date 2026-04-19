@@ -31,7 +31,7 @@ $RECYCLE.BIN/
 .env
 .env.*
 !.env.example
-config/ingest_crypto_documents.env
+/config/
 
 # Python
 __pycache__/

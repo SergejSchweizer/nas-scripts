@@ -43,7 +43,7 @@ abstraction:
 - Command dispatcher: `src/nas_scripts/cli.py` routes a CLI command to the matching job.
 - Factory plus value object: each `config/*.py` module builds one immutable config object from environment variables.
 - Facade: each `jobs/*.py` module presents one job-level workflow and hides the helper calls underneath it.
-- Adapter: `src/nas_scripts/utils/onyx.py` translates local files into the FlowRAG API request shape.
+- Adapter: `src/nas_scripts/utils/flowrag.py` translates local files into the FlowRAG API request shape.
 - Strategy hook: `ingest_crypto_documents.run_job(..., ingest_func=...)` lets tests or alternate callers swap the ingestion action.
 - Persistence layer: `src/nas_scripts/utils/state.py` owns the incremental ingestion state format.
 - Concurrency control: `src/nas_scripts/utils/locking.py` keeps overlapping cron runs from stepping on each other.
@@ -152,7 +152,7 @@ python scripts/organize_temp_media.py
 - Move code into `src/nas_scripts/utils/` only when it is truly generic.
   If logic is specific to one script's domain, keep it owned by that script's job or domain utility module.
 - Ensure every script writes to its own log file through the shared logging helper.
-- Script logs rotate weekly and keep the current file plus the last 3 weekly archives.
+- Script logs rotate weekly and keep all rotated archives.
 - Keep log output expressive and consistent.
   Log lines should include timestamp, level, script identity, process id, and a meaningful action-oriented message.
 - Add or update tests for behavior changes.
@@ -228,7 +228,7 @@ Modules:
 - `src/nas_scripts/utils/filesystem.py`
 - `src/nas_scripts/utils/locking.py`
 - `src/nas_scripts/utils/logging.py`
-- `src/nas_scripts/utils/onyx.py`
+- `src/nas_scripts/utils/flowrag.py`
 - `src/nas_scripts/utils/state.py`
 - `src/nas_scripts/utils/text.py`
 
@@ -342,7 +342,7 @@ ingest_crypto_documents
 |  |- setup_script_logger()
 |     file: src/nas_scripts/utils/logging.py
 |  |- build_payload() / build_headers() / ingest_file()
-|     file: src/nas_scripts/utils/onyx.py
+|     file: src/nas_scripts/utils/flowrag.py
 |  |- load_state() / save_state()
 |     file: src/nas_scripts/utils/state.py
 |  |- extract_text() / extract_pdf_text()

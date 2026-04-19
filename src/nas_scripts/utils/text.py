@@ -1,7 +1,7 @@
 """Text extraction helpers.
 
 These helpers turn PDFs and plain-text files into the extracted content used by
-the Onyx adapter. They are the content-extraction layer below the job facade.
+the FlowRAG adapter. They are the content-extraction layer below the job facade.
 """
 
 from __future__ import annotations

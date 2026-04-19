@@ -78,7 +78,7 @@ def test_job_module_stays_isolated_from_other_script_modules() -> None:
     assert "nas_scripts.jobs.organize_temp_media" not in source
     assert "nas_scripts.config.ingest_crypto_documents" not in source
     assert "nas_scripts.config.organize_temp_media" not in source
-    assert "nas_scripts.utils.onyx" not in source
+    assert "nas_scripts.utils.flowrag" not in source
     assert "nas_scripts.utils.images" not in source
 
 

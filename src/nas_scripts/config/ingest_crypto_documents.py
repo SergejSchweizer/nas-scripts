@@ -105,6 +105,8 @@ def load_ingest_crypto_documents_config() -> IngestCryptoDocumentsConfig:
     config_file = Path(os.environ.get("INGEST_CONFIG_FILE", str(DEFAULT_CONFIG_FILE)))
     file_values = _load_env_file(config_file)
     if not file_values:
+        # Keep older local setups working while the new script-specific config
+        # file becomes the primary convention.
         for legacy_file in LEGACY_CONFIG_FILES:
             if legacy_file == config_file:
                 continue

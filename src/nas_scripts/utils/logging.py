@@ -1,8 +1,8 @@
 """Logging helpers for NAS jobs.
 
 This shared module centralizes the cross-cutting logging concern: each job
-gets the same format, console output, weekly rotation, and retention policy so
-the workflow modules do not need to duplicate logger setup code.
+gets the same format, console output, and weekly rotation so the workflow
+modules do not need to duplicate logger setup code.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def setup_script_logger(script_name: str, log_file: Path) -> logging.Logger:
                 candidate,
                 when="W0",
                 interval=1,
-                backupCount=3,
+                backupCount=0,
                 encoding="utf-8",
                 delay=False,
                 utc=False,

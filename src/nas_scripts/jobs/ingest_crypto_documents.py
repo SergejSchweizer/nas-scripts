@@ -22,7 +22,7 @@ from nas_scripts.config.ingest_crypto_documents import (
 from nas_scripts.utils.filesystem import FileRecord, collect_files
 from nas_scripts.utils.locking import AlreadyLockedError, FileLock
 from nas_scripts.utils.logging import setup_script_logger
-from nas_scripts.utils.onyx import ingest_file
+from nas_scripts.utils.flowrag import ingest_file
 from nas_scripts.utils.state import load_state, save_state
 
 SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md"}
@@ -115,6 +115,8 @@ def run_job(
     )
 
     for rel_path, record in changed_or_new:
+        # Ingest each changed file independently so one failure does not block
+        # the rest of the batch.
         print(f"NEW/CHANGED: {rel_path}")
         logger.info("NEW/CHANGED: %s", rel_path)
         try:

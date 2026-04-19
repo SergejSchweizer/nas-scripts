@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 from nas_scripts.cli import main as cli_main
@@ -167,6 +168,10 @@ def test_setup_script_logger_writes_to_per_script_log_file(tmp_path: Path) -> No
 
     assert log_file.exists()
     assert "hello log" in log_file.read_text(encoding="utf-8")
+    assert any(
+        isinstance(handler, TimedRotatingFileHandler) and handler.backupCount == 3
+        for handler in logger.handlers
+    )
 
 
 def test_setup_script_logger_uses_expressive_log_format(tmp_path: Path) -> None:

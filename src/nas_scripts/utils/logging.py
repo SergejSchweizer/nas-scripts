@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 
@@ -31,7 +32,15 @@ def setup_script_logger(script_name: str, log_file: Path) -> logging.Logger:
     for candidate in candidate_files:
         try:
             candidate.parent.mkdir(parents=True, exist_ok=True)
-            file_handler = logging.FileHandler(candidate, encoding="utf-8")
+            file_handler = TimedRotatingFileHandler(
+                candidate,
+                when="W0",
+                interval=1,
+                backupCount=3,
+                encoding="utf-8",
+                delay=False,
+                utc=False,
+            )
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
             if candidate != log_file:

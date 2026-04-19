@@ -22,8 +22,6 @@ Python automation scripts for a UGREEN NASync DXP4800 Plus.
 
 This repository is the Python home for NAS jobs such as ingestion, sync, backup, and media automation.
 
-Legacy scripts stay in `old/` until they are migrated into the package structure.
-
 ## Project Layout
 
 - `src/nas_scripts/`: main Python package
@@ -37,7 +35,6 @@ Legacy scripts stay in `old/` until they are migrated into the package structure
 - `tests/integration/<script_name>/`: integration tests grouped per script
 - `tests/data/<script_name>/`: local test fixtures grouped per script and excluded from Git
 - `config/.env.example`: local environment template
-- `old/`: legacy scripts preserved for migration reference
 
 ## Setup
 
@@ -120,12 +117,11 @@ python scripts/organize_temp_media.py
 - Move code into `src/nas_scripts/utils/` only when it is truly generic.
   If logic is specific to one script's domain, keep it owned by that script's job or domain utility module.
 - Ensure every script writes to its own log file through the shared logging helper.
+- Script logs rotate weekly and keep the current file plus the last 3 weekly archives.
 - Keep log output expressive and consistent.
   Log lines should include timestamp, level, script identity, process id, and a meaningful action-oriented message.
 - Add or update tests for behavior changes.
 - Keep secrets out of source control and use environment variables or local `.env` files.
-- Treat `old/` as read-only unless a script is being migrated.
-
 ## OOP and Design
 
 This project uses light OOP rather than deep class hierarchies.

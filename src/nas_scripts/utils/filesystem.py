@@ -54,8 +54,10 @@ def collect_files(
     *,
     supported_extensions: set[str],
     ignored_names: set[str],
+    ignored_dir_names: set[str] | None = None,
 ) -> dict[str, FileRecord]:
     """Collect the filesystem snapshot that the ingestion facade consumes."""
+    ignored_dir_names = ignored_dir_names or set()
     found: dict[str, FileRecord] = {}
     for path in sorted(root.rglob("*")):
         if not is_supported_file(
@@ -63,6 +65,9 @@ def collect_files(
             supported_extensions=supported_extensions,
             ignored_names=ignored_names,
         ):
+            continue
+        rel_parts = path.relative_to(root).parts
+        if any(part in ignored_dir_names for part in rel_parts[:-1]):
             continue
         stat = path.stat()
         rel_path = path.relative_to(root).as_posix()

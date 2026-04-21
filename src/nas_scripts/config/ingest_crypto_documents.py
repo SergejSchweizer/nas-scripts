@@ -12,12 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_SCAN_DIR = Path("/volume1/RAG/crypto")
-DEFAULT_LOCK_FILE = Path("/tmp/ingest_crypto_documents.lock")
-DEFAULT_LOG_DIR = Path("/volume1/Temp/logs")
-DEFAULT_FLOWRAG_BASE_URL = "http://10.10.10.10:18080"
-DEFAULT_MAX_FILES_PER_RUN = 3
-DEFAULT_CONFIG_FILE = Path("config/ingest_crypto_documents.env")
+CONFIG_FILE = Path("config/ingest_crypto_documents.env")
 LEGACY_CONFIG_FILES = (Path("config/.env"), Path("config/.env.example"))
 
 
@@ -30,6 +25,7 @@ class IngestCryptoDocumentsConfig:
     flowrag_api_key: str | None
     flowrag_dataset_id: str | None
     scan_dir: Path
+    ingested_dir: Path
     state_file: Path
     lock_file: Path
     log_dir: Path
@@ -101,9 +97,17 @@ def _config_value(file_values: dict[str, str], name: str, default: str | None = 
     return default
 
 
+def _required_config_value(file_values: dict[str, str], name: str) -> str:
+    """Resolve a required configuration value from env or config file."""
+    value = _config_value(file_values, name)
+    if value is None:
+        raise ValueError(f"Missing required configuration value: {name}")
+    return value
+
+
 def load_ingest_crypto_documents_config() -> IngestCryptoDocumentsConfig:
     """Factory function that builds the ingestion runtime configuration."""
-    config_file = Path(os.environ.get("INGEST_CONFIG_FILE", str(DEFAULT_CONFIG_FILE)))
+    config_file = Path(os.environ.get("INGEST_CONFIG_FILE", str(CONFIG_FILE)))
     file_values = _load_env_file(config_file)
     if not file_values:
         # Keep older local setups working while the new script-specific config
@@ -114,44 +118,22 @@ def load_ingest_crypto_documents_config() -> IngestCryptoDocumentsConfig:
             file_values = _load_env_file(legacy_file)
             if file_values:
                 break
-    scan_dir = Path(_config_value(file_values, "SCAN_DIR", str(DEFAULT_SCAN_DIR)) or DEFAULT_SCAN_DIR)
-    state_file = Path(
-        _config_value(
-            file_values,
-            "STATE_FILE",
-            str(scan_dir / ".flowrag_ingest_state.json"),
-        )
-        or scan_dir / ".flowrag_ingest_state.json"
-    )
-    lock_file = Path(
-        _config_value(
-            file_values,
-            "LOCK_FILE",
-            str(DEFAULT_LOCK_FILE),
-        )
-        or DEFAULT_LOCK_FILE
-    )
+    scan_dir = Path(_required_config_value(file_values, "SCAN_DIR"))
+    ingested_dir = Path(_required_config_value(file_values, "INGESTED_DIR"))
+    state_file = Path(_required_config_value(file_values, "STATE_FILE"))
+    lock_file = Path(_required_config_value(file_values, "LOCK_FILE"))
+    log_dir = Path(_required_config_value(file_values, "LOG_DIR"))
 
     return IngestCryptoDocumentsConfig(
         script_name="ingest_crypto_documents",
-        flowrag_base_url=_config_value(
-            file_values,
-            "FLOWRAG_BASE_URL",
-            DEFAULT_FLOWRAG_BASE_URL,
-        )
-        or DEFAULT_FLOWRAG_BASE_URL,
+        flowrag_base_url=_required_config_value(file_values, "FLOWRAG_BASE_URL"),
         flowrag_api_key=_config_value(file_values, "FLOWRAG_API_KEY"),
         flowrag_dataset_id=_config_value(file_values, "FLOWRAG_DATASET_ID"),
         scan_dir=scan_dir,
+        ingested_dir=ingested_dir,
         state_file=state_file,
         lock_file=lock_file,
-        log_dir=Path(
-            _config_value(file_values, "LOG_DIR", str(DEFAULT_LOG_DIR)) or DEFAULT_LOG_DIR
-        ),
-        max_files_per_run=_parse_optional_int(
-            _config_value(file_values, "MAX_FILES_PER_RUN", str(DEFAULT_MAX_FILES_PER_RUN))
-        ),
-        request_timeout=int(
-            _config_value(file_values, "REQUEST_TIMEOUT", "300") or "300"
-        ),
+        log_dir=log_dir,
+        max_files_per_run=_parse_optional_int(_required_config_value(file_values, "MAX_FILES_PER_RUN")),
+        request_timeout=int(_required_config_value(file_values, "REQUEST_TIMEOUT")),
     )

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import logging
+import shutil
 import sys
 from pathlib import Path
 from typing import Callable
@@ -44,6 +45,25 @@ def _partition_files(
             successful_state[rel_path] = record.to_state()
 
     return successful_state, changed_or_new
+
+
+def _move_to_ingested_dir(
+    source_path: Path,
+    rel_path: str,
+    *,
+    config: IngestCryptoDocumentsConfig,
+) -> Path:
+    """Move an ingested file into the local archive directory."""
+    destination_path = config.ingested_dir / rel_path
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    if destination_path.exists():
+        if destination_path.is_dir():
+            raise IsADirectoryError(
+                f"Cannot overwrite directory with file: {destination_path}"
+            )
+        destination_path.unlink()
+    shutil.move(str(source_path), str(destination_path))
+    return destination_path
 
 
 def run_job(
@@ -83,6 +103,7 @@ def run_job(
         config.scan_dir,
         supported_extensions=SUPPORTED_EXTENSIONS,
         ignored_names={config.state_file.name, config.lock_file.name},
+        ignored_dir_names={config.ingested_dir.name},
     )
 
     successful_state, changed_or_new = _partition_files(current_files, previous_state)
@@ -121,9 +142,11 @@ def run_job(
         logger.info("NEW/CHANGED: %s", rel_path)
         try:
             ingest(Path(record.path), rel_path)
+            moved_path = _move_to_ingested_dir(Path(record.path), rel_path, config=config)
             successful_state[rel_path] = record.to_state()
             print(f"Ingested: {rel_path}")
             logger.info("Ingested: %s", rel_path)
+            logger.info("Moved ingested file to %s", moved_path)
         except Exception as exc:  # noqa: BLE001
             print(f"ERROR ingesting {rel_path}: {exc}", file=sys.stderr)
             logger.exception("ERROR ingesting %s: %s", rel_path, exc)

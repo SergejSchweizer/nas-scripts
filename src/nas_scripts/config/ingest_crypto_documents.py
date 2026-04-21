@@ -13,6 +13,7 @@ from pathlib import Path
 
 
 DEFAULT_SCAN_DIR = Path("/volume1/RAG/crypto")
+DEFAULT_LOCK_FILE = Path("/tmp/ingest_crypto_documents.lock")
 DEFAULT_LOG_DIR = Path("/volume1/Temp/logs")
 DEFAULT_FLOWRAG_BASE_URL = "http://10.10.10.10:18080"
 DEFAULT_MAX_FILES_PER_RUN = 3
@@ -126,9 +127,9 @@ def load_ingest_crypto_documents_config() -> IngestCryptoDocumentsConfig:
         _config_value(
             file_values,
             "LOCK_FILE",
-            str(scan_dir / ".flowrag_ingest.lock"),
+            str(DEFAULT_LOCK_FILE),
         )
-        or scan_dir / ".flowrag_ingest.lock"
+        or DEFAULT_LOCK_FILE
     )
 
     return IngestCryptoDocumentsConfig(

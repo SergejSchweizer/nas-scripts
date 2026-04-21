@@ -47,7 +47,7 @@ def make_config(
         flowrag_dataset_id=dataset_id,
         scan_dir=scan_dir,
         state_file=scan_dir / ".flowrag_ingest_state.json",
-        lock_file=scan_dir / ".flowrag_ingest.lock",
+        lock_file=tmp_path / "ingest_crypto_documents.lock",
         log_dir=tmp_path / "logs",
         max_files_per_run=None,
         request_timeout=30,
@@ -64,7 +64,7 @@ def test_collect_files_filters_supported_extensions(tmp_path: Path) -> None:
     files = collect_files(
         root,
         supported_extensions={".txt", ".md"},
-        ignored_names={".flowrag_ingest_state.json", ".flowrag_ingest.lock"},
+        ignored_names={".flowrag_ingest_state.json", "ingest_crypto_documents.lock"},
     )
 
     assert sorted(files) == ["README.md", "note.txt"]

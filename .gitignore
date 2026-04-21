@@ -32,6 +32,8 @@ $RECYCLE.BIN/
 .env.*
 !.env.example
 /config/
+*.flowrag_ingest_state.json
+ingested/
 
 # Python
 __pycache__/

@@ -18,6 +18,7 @@ from nas_scripts.utils.state import load_state
 
 
 JOB_MODULE = Path("src/nas_scripts/jobs/ingest_crypto_documents.py")
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class DummyLogger:
@@ -140,8 +141,8 @@ def test_load_ingest_crypto_documents_config_reads_local_config_file(
                 "FLOWRAG_API_KEY=test-key",
                 "FLOWRAG_DATASET_ID=dataset-999",
                 "SCAN_DIR=/tmp/crypto",
-                "INGESTED_DIR=/tmp/crypto/ingested",
-                "STATE_FILE=/tmp/crypto/ingested/.flowrag_ingest_state.json",
+                "INGESTED_DIR=ingested",
+                "STATE_FILE=ingested/.flowrag_ingest_state.json",
                 "LOCK_FILE=/tmp/crypto/lockfile",
                 "LOG_DIR=/tmp/logs",
                 "MAX_FILES_PER_RUN=7",
@@ -160,8 +161,8 @@ def test_load_ingest_crypto_documents_config_reads_local_config_file(
     assert config.flowrag_api_key == "test-key"
     assert config.flowrag_dataset_id == "dataset-999"
     assert config.scan_dir == Path("/tmp/crypto")
-    assert config.ingested_dir == Path("/tmp/crypto/ingested")
-    assert config.state_file == Path("/tmp/crypto/ingested/.flowrag_ingest_state.json")
+    assert config.ingested_dir == REPO_ROOT / "ingested"
+    assert config.state_file == REPO_ROOT / "ingested" / ".flowrag_ingest_state.json"
     assert config.lock_file == Path("/tmp/crypto/lockfile")
     assert config.log_dir == Path("/tmp/logs")
     assert config.max_files_per_run == 7

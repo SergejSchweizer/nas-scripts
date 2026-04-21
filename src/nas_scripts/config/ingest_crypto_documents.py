@@ -14,6 +14,7 @@ from pathlib import Path
 
 CONFIG_FILE = Path("config/ingest_crypto_documents.env")
 LEGACY_CONFIG_FILES = (Path("config/.env"), Path("config/.env.example"))
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,12 @@ def _required_config_value(file_values: dict[str, str], name: str) -> str:
     return value
 
 
+def _resolve_repo_path(value: str) -> Path:
+    """Resolve relative config paths against the repository root."""
+    path = Path(value)
+    return path if path.is_absolute() else REPO_ROOT / path
+
+
 def load_ingest_crypto_documents_config() -> IngestCryptoDocumentsConfig:
     """Factory function that builds the ingestion runtime configuration."""
     config_file = Path(os.environ.get("INGEST_CONFIG_FILE", str(CONFIG_FILE)))
@@ -118,11 +125,11 @@ def load_ingest_crypto_documents_config() -> IngestCryptoDocumentsConfig:
             file_values = _load_env_file(legacy_file)
             if file_values:
                 break
-    scan_dir = Path(_required_config_value(file_values, "SCAN_DIR"))
-    ingested_dir = Path(_required_config_value(file_values, "INGESTED_DIR"))
-    state_file = Path(_required_config_value(file_values, "STATE_FILE"))
-    lock_file = Path(_required_config_value(file_values, "LOCK_FILE"))
-    log_dir = Path(_required_config_value(file_values, "LOG_DIR"))
+    scan_dir = _resolve_repo_path(_required_config_value(file_values, "SCAN_DIR"))
+    ingested_dir = _resolve_repo_path(_required_config_value(file_values, "INGESTED_DIR"))
+    state_file = _resolve_repo_path(_required_config_value(file_values, "STATE_FILE"))
+    lock_file = _resolve_repo_path(_required_config_value(file_values, "LOCK_FILE"))
+    log_dir = _resolve_repo_path(_required_config_value(file_values, "LOG_DIR"))
 
     return IngestCryptoDocumentsConfig(
         script_name="ingest_crypto_documents",

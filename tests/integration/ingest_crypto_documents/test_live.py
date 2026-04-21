@@ -67,7 +67,7 @@ def test_ingest_crypto_documents_pdf_against_real_flowrag_api(
         flowrag_dataset_id=dataset_id,
         scan_dir=scan_dir,
         ingested_dir=scan_dir / "ingested",
-        state_file=tmp_path / "state" / ".flowrag_ingest_state.json",
+        state_file=scan_dir / "ingested" / ".flowrag_ingest_state.json",
         lock_file=tmp_path / "locks" / ".flowrag_ingest.lock",
         log_dir=tmp_path / "logs",
         max_files_per_run=1,
@@ -80,5 +80,4 @@ def test_ingest_crypto_documents_pdf_against_real_flowrag_api(
     assert exit_code == 0
     assert list(saved_state) == [PDF_FIXTURE.name]
     assert saved_state[PDF_FIXTURE.name]["sha256"]
-    assert not target_pdf.exists()
-    assert (config.ingested_dir / PDF_FIXTURE.name).exists()
+    assert target_pdf.exists()

@@ -47,7 +47,7 @@ def make_config(
         flowrag_dataset_id=dataset_id,
         scan_dir=scan_dir,
         ingested_dir=scan_dir / "ingested",
-        state_file=scan_dir / ".flowrag_ingest_state.json",
+        state_file=scan_dir / "ingested" / ".flowrag_ingest_state.json",
         lock_file=tmp_path / "ingest_crypto_documents.lock",
         log_dir=tmp_path / "logs",
         max_files_per_run=None,
@@ -141,7 +141,7 @@ def test_load_ingest_crypto_documents_config_reads_local_config_file(
                 "FLOWRAG_DATASET_ID=dataset-999",
                 "SCAN_DIR=/tmp/crypto",
                 "INGESTED_DIR=/tmp/crypto/ingested",
-                "STATE_FILE=/tmp/crypto/state.json",
+                "STATE_FILE=/tmp/crypto/ingested/.flowrag_ingest_state.json",
                 "LOCK_FILE=/tmp/crypto/lockfile",
                 "LOG_DIR=/tmp/logs",
                 "MAX_FILES_PER_RUN=7",
@@ -161,7 +161,7 @@ def test_load_ingest_crypto_documents_config_reads_local_config_file(
     assert config.flowrag_dataset_id == "dataset-999"
     assert config.scan_dir == Path("/tmp/crypto")
     assert config.ingested_dir == Path("/tmp/crypto/ingested")
-    assert config.state_file == Path("/tmp/crypto/state.json")
+    assert config.state_file == Path("/tmp/crypto/ingested/.flowrag_ingest_state.json")
     assert config.lock_file == Path("/tmp/crypto/lockfile")
     assert config.log_dir == Path("/tmp/logs")
     assert config.max_files_per_run == 7
@@ -237,10 +237,10 @@ def test_run_job_ingests_changed_files_and_updates_state(tmp_path: Path) -> None
     assert exit_code == 0
     assert ingested == ["first.txt:first.txt", "second.md:second.md"]
     assert sorted(saved_state) == ["first.txt", "second.md"]
-    assert not (config.scan_dir / "first.txt").exists()
-    assert not (config.scan_dir / "second.md").exists()
-    assert (config.ingested_dir / "first.txt").exists()
-    assert (config.ingested_dir / "second.md").exists()
+    assert (config.scan_dir / "first.txt").exists()
+    assert (config.scan_dir / "second.md").exists()
+    assert not (config.ingested_dir / "first.txt").exists()
+    assert not (config.ingested_dir / "second.md").exists()
 
 
 def test_run_job_fails_when_dataset_id_missing(tmp_path: Path, capsys) -> None:
@@ -386,10 +386,10 @@ def test_run_job_limits_ingestion_to_max_files_per_run(tmp_path: Path) -> None:
     assert exit_code == 0
     assert ingested == ["a.txt", "b.txt"]
     assert sorted(saved_state) == ["a.txt", "b.txt"]
-    assert not (config.scan_dir / "a.txt").exists()
-    assert not (config.scan_dir / "b.txt").exists()
-    assert (config.ingested_dir / "a.txt").exists()
-    assert (config.ingested_dir / "b.txt").exists()
+    assert (config.scan_dir / "a.txt").exists()
+    assert (config.scan_dir / "b.txt").exists()
+    assert not (config.ingested_dir / "a.txt").exists()
+    assert not (config.ingested_dir / "b.txt").exists()
     assert (config.scan_dir / "c.txt").exists()
 
 

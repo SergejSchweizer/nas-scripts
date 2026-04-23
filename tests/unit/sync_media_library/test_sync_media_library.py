@@ -127,7 +127,7 @@ def test_build_stream_map_args_keeps_only_english_audio_and_subtitles() -> None:
         MediaStream(index=4, codec_type="subtitle", language="spa"),
     ]
 
-    assert build_stream_map_args(streams) == [
+    assert build_stream_map_args(streams, excluded_indexes={2}) == [
         "-map",
         "0:0",
         "-map",
@@ -217,10 +217,70 @@ def test_keep_only_english_audio_and_subtitles_updates_matching_files(
         "nas_scripts.jobs.sync_media_library.remove_leftover_temp_files",
         lambda root: [],
     )
+    saved_state: dict[str, dict[str, object]] = {}
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.save_state",
+        lambda state_file, state: saved_state.update(state),
+    )
 
     keep_only_english_audio_and_subtitles(config, logger=DummyLogger())
 
     assert filtered == [target]
+    assert saved_state == {}
+
+
+def test_keep_only_english_audio_and_subtitles_only_verifies_files_once_clean(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = make_config(tmp_path)
+    config.dest_dir.mkdir(parents=True)
+    target = config.dest_dir / "movie.mkv"
+    target.write_text("media", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.collect_relative_media_files",
+        lambda root, extensions: ["movie.mkv"],
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.load_state",
+        lambda state_file: {},
+    )
+
+    probe_results = [
+        [
+            MediaStream(index=0, codec_type="video", language=None),
+            MediaStream(index=1, codec_type="audio", language="eng"),
+            MediaStream(index=2, codec_type="audio", language="rus"),
+            MediaStream(index=3, codec_type="subtitle", language="spa"),
+        ],
+        [
+            MediaStream(index=0, codec_type="video", language=None),
+            MediaStream(index=1, codec_type="audio", language="eng"),
+            MediaStream(index=3, codec_type="subtitle", language="spa"),
+        ],
+    ]
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.probe_streams",
+        lambda file_path: probe_results.pop(0),
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.filter_to_english_audio_and_subtitles",
+        lambda file_path, ffmpeg_threads, logger=None: True,
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.remove_leftover_temp_files",
+        lambda root: [],
+    )
+
+    saved_state: dict[str, dict[str, object]] = {}
+    monkeypatch.setattr(
+        "nas_scripts.jobs.sync_media_library.save_state",
+        lambda state_file, state: saved_state.update(state),
+    )
+
+    keep_only_english_audio_and_subtitles(config, logger=DummyLogger())
+
+    assert saved_state == {}
 
 
 def test_keep_only_english_audio_and_subtitles_skips_verified_files(
@@ -331,7 +391,7 @@ def test_keep_only_english_audio_and_subtitles_reprocesses_outdated_cached_files
 
     keep_only_english_audio_and_subtitles(config, logger=DummyLogger())
 
-    assert probe_calls == [target]
+    assert probe_calls == [target, target]
     assert filtered == [target]
 
 
@@ -356,7 +416,7 @@ def test_filter_to_english_audio_and_subtitles_verifies_output_before_replacing(
             return [
                 MediaStream(index=0, codec_type="video", language=None),
                 MediaStream(index=1, codec_type="audio", language="eng"),
-                MediaStream(index=3, codec_type="subtitle", language="en"),
+                MediaStream(index=3, codec_type="subtitle", language="spa"),
             ]
         raise AssertionError(f"Unexpected path: {path}")
 
@@ -381,7 +441,7 @@ def test_filter_to_english_audio_and_subtitles_verifies_output_before_replacing(
         handler.flush()
 
     assert file_path.read_text(encoding="utf-8") == "filtered"
-    assert "Verified English-only audio/subtitle streams" in log_file.read_text(encoding="utf-8")
+    assert "Removed one non-English audio/subtitle stream" in log_file.read_text(encoding="utf-8")
     assert "Verified audio tracks for" in log_file.read_text(encoding="utf-8")
 
 
@@ -442,7 +502,7 @@ def test_filter_to_english_audio_and_subtitles_rejects_unverified_output(
         handler.flush()
 
     assert file_path.read_text(encoding="utf-8") == "original"
-    assert "Verification failed for" in log_file.read_text(encoding="utf-8")
+    assert "Stream 2 was not removed" in log_file.read_text(encoding="utf-8")
 
 
 def test_collect_relative_media_files_uses_real_media_fixtures() -> None:

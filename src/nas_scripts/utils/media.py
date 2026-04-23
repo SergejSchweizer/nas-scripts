@@ -115,10 +115,17 @@ def find_non_english_audio_subtitle_streams(streams: list[MediaStream]) -> list[
     return indexes
 
 
-def build_stream_map_args(streams: list[MediaStream]) -> list[str]:
+def build_stream_map_args(
+    streams: list[MediaStream],
+    *,
+    excluded_indexes: set[int] | None = None,
+) -> list[str]:
     """Translate the filtering decision into ffmpeg mapping arguments."""
+    excluded_indexes = excluded_indexes or set()
     map_args: list[str] = []
     for stream in streams:
+        if stream.index in excluded_indexes:
+            continue
         if stream.codec_type in {"audio", "subtitle"}:
             if not is_english_language(stream.language):
                 continue
@@ -142,9 +149,23 @@ def filter_to_english_audio_and_subtitles(
     ffmpeg_threads: int,
     logger: logging.Logger | None = None,
 ) -> bool:
-    """Apply the remuxing strategy and verify the output before replacing."""
+    """Remove one non-English audio/subtitle track and verify the output."""
     streams = probe_streams(file_path)
-    map_args = build_stream_map_args(streams)
+    non_english_indexes = find_non_english_audio_subtitle_streams(streams)
+    if not non_english_indexes:
+        if logger is not None:
+            logger.info("No non-English audio/subtitle streams found for %s", file_path)
+        return True
+
+    stream_to_remove = non_english_indexes[0]
+    map_args = build_stream_map_args(streams, excluded_indexes={stream_to_remove})
+    if not map_args:
+        if logger is not None:
+            logger.error(
+                "Skipping %s because filtering would remove every mapped stream.",
+                file_path,
+            )
+        return False
 
     temp_file = file_path.with_name(f"temp.{file_path.suffix.lstrip('.')}")
     result = subprocess.run(
@@ -184,18 +205,22 @@ def filter_to_english_audio_and_subtitles(
         )
 
     remaining_non_english = find_non_english_audio_subtitle_streams(verified_streams)
-    if remaining_non_english:
+    if stream_to_remove in remaining_non_english:
         temp_file.unlink(missing_ok=True)
         if logger is not None:
             logger.error(
-                "Verification failed for %s. Non-English stream(s) still present in output: %s",
+                "Verification failed for %s. Stream %s was not removed.",
                 file_path,
-                ",".join(str(index) for index in remaining_non_english),
+                stream_to_remove,
             )
         return False
 
     if logger is not None:
-        logger.info("Verified English-only audio/subtitle streams for %s", file_path)
+        logger.info(
+            "Removed one non-English audio/subtitle stream from %s: %s",
+            file_path,
+            stream_to_remove,
+        )
 
     temp_file.replace(file_path)
     return True

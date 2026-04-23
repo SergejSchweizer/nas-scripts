@@ -22,14 +22,13 @@ from nas_scripts.utils.filesystem import sha256_file
 from nas_scripts.utils.locking import AlreadyLockedError, FileLock
 from nas_scripts.utils.logging import setup_script_logger
 from nas_scripts.utils.media import (
-    build_stream_map_args,
     collect_relative_files,
     collect_relative_media_files,
     copy_file_with_metadata,
     find_non_english_audio_subtitle_streams,
+    filter_to_english_audio_and_subtitles,
     is_media_file,
     probe_streams,
-    filter_to_english_audio_and_subtitles,
     remove_empty_directories,
     remove_leftover_temp_files,
 )
@@ -130,22 +129,27 @@ def keep_only_english_audio_and_subtitles(
             }
             continue
 
-        kept_map_count = len(build_stream_map_args(streams)) // 2
         logger.info(
-            "Filtering %s to English audio/subtitle streams only. Removing stream(s): %s",
+            "Filtering %s by removing one non-English audio/subtitle stream: %s",
             file_path,
-            ",".join(str(index) for index in non_english_indexes),
+            non_english_indexes[0],
         )
-        if kept_map_count == 0:
-            logger.error(
-                "Skipping %s because filtering would remove all mapped streams.", file_path
-            )
-            continue
-        if filter_to_english_audio_and_subtitles(
+        if not filter_to_english_audio_and_subtitles(
             file_path,
             ffmpeg_threads=config.ffmpeg_threads,
             logger=logger,
         ):
+            logger.error("Failed to process %s", file_path)
+            continue
+
+        try:
+            updated_streams = probe_streams(file_path)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("ffprobe failed while rechecking %s: %s", file_path, exc)
+            continue
+
+        remaining_non_english = find_non_english_audio_subtitle_streams(updated_streams)
+        if not remaining_non_english:
             next_state[relpath] = {
                 "sha256": sha256_file(file_path),
                 "verified": True,
@@ -153,7 +157,11 @@ def keep_only_english_audio_and_subtitles(
             }
             logger.info("Updated file: %s", file_path)
         else:
-            logger.error("Failed to process %s", file_path)
+            logger.info(
+                "Updated file: %s. Remaining non-English stream(s): %s",
+                file_path,
+                ",".join(str(index) for index in remaining_non_english),
+            )
 
     for temp_file in remove_leftover_temp_files(config.dest_dir):
         logger.info("Removed leftover temp file: %s", temp_file)

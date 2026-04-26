@@ -7,6 +7,7 @@ paths.
 
 from __future__ import annotations
 
+from typing import IO
 import os
 from pathlib import Path
 
@@ -26,7 +27,7 @@ class FileLock:
     def __init__(self, lock_path: Path) -> None:
         """Create a file lock that uses ``lock_path`` as the lock file."""
         self.lock_path = lock_path
-        self._handle = None
+        self._handle: IO[str] | None = None
 
     def acquire(self) -> "FileLock":
         """Acquire the lock so the current job becomes the sole active run."""
@@ -35,7 +36,7 @@ class FileLock:
         try:
             if os.name == "nt":
                 handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
             else:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             handle.seek(0)
@@ -55,7 +56,7 @@ class FileLock:
         try:
             if os.name == "nt":
                 self._handle.seek(0)
-                msvcrt.locking(self._handle.fileno(), msvcrt.LK_UNLCK, 1)
+                msvcrt.locking(self._handle.fileno(), msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
             else:
                 fcntl.flock(self._handle.fileno(), fcntl.LOCK_UN)
         finally:

@@ -1,4 +1,4 @@
 # Keep dependency definitions in pyproject.toml.
-# This file stays up to date by installing the local project and its dev extras.
+# This file installs the local project with dev extras from pyproject.toml
+# (including pytest, ruff, and mypy).
 -e .[dev]
-pytest>=8.0

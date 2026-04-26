@@ -10,13 +10,16 @@ from __future__ import annotations
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
+_grp: Any
+_pwd: Any
 try:
-    import grp
-    import pwd
+    import grp as _grp
+    import pwd as _pwd
 except ImportError:  # pragma: no cover - platform-specific
-    grp = None
-    pwd = None
+    _grp = None
+    _pwd = None
 
 
 def has_extension(path: Path, extensions: tuple[str, ...]) -> bool:
@@ -76,8 +79,8 @@ def set_path_timestamp_from_source(target: Path, source: Path) -> None:
 
 def apply_ownership(path: Path, *, owner_user: str | None, owner_group: str | None) -> None:
     """Apply the optional ownership policy used by the organizer workflow."""
-    if not owner_user or not owner_group or pwd is None or grp is None:
+    if not owner_user or not owner_group or _pwd is None or _grp is None:
         return
-    uid = pwd.getpwnam(owner_user).pw_uid
-    gid = grp.getgrnam(owner_group).gr_gid
+    uid = _pwd.getpwnam(owner_user).pw_uid
+    gid = _grp.getgrnam(owner_group).gr_gid
     os.chown(path, uid, gid)

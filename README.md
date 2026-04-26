@@ -2,9 +2,8 @@
 
 Python automation for NAS workflows.
 
-This repository contains three small NAS jobs:
+This repository contains two NAS jobs:
 
-- `ingest-crypto-documents`: ingest crypto RAG documents into FlowRAG
 - `sync-media-library`: mirror media into a library and filter non-English streams
 - `organize-temp-media`: sort temporary photos and videos into dated folders
 
@@ -16,6 +15,7 @@ This repository contains three small NAS jobs:
 - [Configuration](#configuration)
 - [Execution](#execution)
 - [System Dependencies](#system-dependencies)
+- [Quality Checks](#quality-checks)
 - [Testing](#testing)
 - [Development Rules](#development-rules)
 - [Troubleshooting](#troubleshooting)
@@ -24,15 +24,15 @@ This repository contains three small NAS jobs:
 
 Install dependencies and run the test suite:
 
-```powershell
-.venv\Scripts\Activate.ps1
+```bash
+. .venv/bin/activate
 python -m pip install -r requirements.txt
 .venv/bin/pytest -q
 ```
 
 Run the CLI:
 
-```powershell
+```bash
 python -m nas_scripts
 ```
 
@@ -46,10 +46,9 @@ The codebase is organized by responsibility:
 | `src/nas_scripts/__main__.py` | `python -m nas_scripts` entrypoint |
 | `src/nas_scripts/config/` | Environment-driven runtime config |
 | `src/nas_scripts/jobs/` | Job orchestration and workflow logic |
-| `src/nas_scripts/utils/` | Shared helpers for files, logging, locking, media, text, and state |
+| `src/nas_scripts/utils/` | Shared helpers for files, logging, locking, media, and state |
 | `scripts/` | Thin direct-execution wrappers |
 | `tests/unit/` | Fast unit tests |
-| `tests/integration/` | Integration tests, including live FlowRAG coverage |
 
 Each job follows the same general lifecycle:
 
@@ -61,35 +60,6 @@ Each job follows the same general lifecycle:
 6. Release the lock.
 
 ## Jobs
-
-### `ingest-crypto-documents`
-
-Purpose: ingest supported crypto documents into FlowRAG from a configured scan directory.
-
-Behavior:
-
-| Item | Details |
-| --- | --- |
-| Input | `.pdf`, `.txt`, and `.md` files under `SCAN_DIR` |
-| State | Tracks file path, size, mtime, and SHA-256 hash |
-| Output | Uploads documents to FlowRAG and triggers parsing |
-| Limits | Supports `MAX_FILES_PER_RUN` |
-| Safety | Uses a lock file to prevent overlapping runs |
-
-Entry points:
-
-```powershell
-python -m nas_scripts ingest-crypto-documents
-python -m nas_scripts ingest-crypto-documents --max-files-per-run 1
-python scripts/ingest_crypto_documents.py
-```
-
-Important detail:
-
-- The loader reads `config/ingest_crypto_documents.env` by default.
-- You can override that file with `INGEST_CONFIG_FILE`.
-- Relative paths in that config are resolved against the repository root.
-- `FLOWRAG_BASE_URL`, `FLOWRAG_DATASET_ID`, and `FLOWRAG_API_KEY` are required at run time.
 
 ### `sync-media-library`
 
@@ -108,7 +78,7 @@ Behavior:
 
 Entry points:
 
-```powershell
+```bash
 python -m nas_scripts sync-media-library
 python scripts/sync_media_library.py
 ```
@@ -134,7 +104,7 @@ Behavior:
 
 Entry points:
 
-```powershell
+```bash
 python -m nas_scripts organize-temp-media
 python -m nas_scripts organize-temp-media --reorganize-existing
 python scripts/organize_temp_media.py
@@ -155,35 +125,10 @@ Logging:
 
 State:
 
-- `ingest-crypto-documents` stores incremental ingestion state in JSON.
 - `sync-media-library` stores checksum-based verification state in JSON.
 - `organize-temp-media` does not keep a persistent state file.
 
 ## Configuration
-
-### Ingest
-
-Configuration source:
-
-- `config/ingest_crypto_documents.env`
-- `INGEST_CONFIG_FILE` can point to an alternate file
-- Process environment variables override file values
-
-Required settings:
-
-- `FLOWRAG_BASE_URL`
-- `SCAN_DIR`
-- `INGESTED_DIR`
-- `STATE_FILE`
-- `LOCK_FILE`
-- `LOG_DIR`
-- `MAX_FILES_PER_RUN`
-- `REQUEST_TIMEOUT`
-
-Runtime-required settings:
-
-- `FLOWRAG_DATASET_ID`
-- `FLOWRAG_API_KEY`
 
 ### Media Sync
 
@@ -229,27 +174,19 @@ Defaults:
 
 ### Direct CLI
 
-```powershell
-python -m nas_scripts ingest-crypto-documents
+```bash
 python -m nas_scripts sync-media-library
 python -m nas_scripts organize-temp-media
 ```
 
 ### Direct Scripts
 
-```powershell
-python scripts/ingest_crypto_documents.py
+```bash
 python scripts/sync_media_library.py
 python scripts/organize_temp_media.py
 ```
 
 ### Cron Examples
-
-Ingest:
-
-```bash
-0 * * * * cd /path/to/nas-scripts && /path/to/nas-scripts/.venv/bin/python -m nas_scripts ingest-crypto-documents
-```
 
 Media sync:
 
@@ -279,36 +216,53 @@ sudo apt update
 sudo apt install -y ffmpeg
 ```
 
+## Quality Checks
+
+Run Ruff (with fixes):
+
+```bash
+.venv/bin/ruff check --fix .
+```
+
+Run MyPy:
+
+```bash
+.venv/bin/mypy
+```
+
+Enable repository pre-commit hooks:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The pre-commit hook runs:
+
+- `ruff check --fix .`
+- `mypy`
+- `pytest -q`
+
+Because Ruff runs in `--fix` mode, it may modify files before the commit
+completes. If that happens, review/stage the changes and commit again.
+
 ## Testing
 
 Run all tests:
 
-```powershell
+```bash
 .venv/bin/pytest -q
 ```
 
 Run only the unit suites:
 
-```powershell
+```bash
 .venv/bin/pytest -q tests/unit
-```
-
-Run the live FlowRAG integration test:
-
-```powershell
-$env:RUN_LIVE_FLOWRAG_TESTS="1"
-$env:FLOWRAG_BASE_URL="http://your-flowrag-host:18080"
-$env:FLOWRAG_API_KEY="your-api-key"
-$env:FLOWRAG_DATASET_ID="your-dataset-id"
-.venv/bin/pytest -q tests/integration -m "integration and live"
 ```
 
 The repository currently includes unit coverage for:
 
 - CLI dispatch
 - config loading
-- file discovery and incremental state
-- FlowRAG upload and parsing helpers
 - media copy and stream filtering
 - temp-file organization and destination routing
 - logger setup and file locking
@@ -319,7 +273,6 @@ The repository currently includes unit coverage for:
 - Keep reusable logic in `src/nas_scripts/utils/`.
 - Keep `scripts/` thin.
 - Keep jobs isolated from each other.
-- Use environment variables or local config files for secrets.
 - Update or add tests when behavior changes.
 - Keep log output expressive and consistent.
 
@@ -335,14 +288,3 @@ If media sync fails:
 
 - Confirm `ffmpeg` and `ffprobe` are installed and on `PATH`.
 - Check whether the file has more than one non-English track and needs another run.
-
-If ingest fails:
-
-- Confirm `FLOWRAG_BASE_URL`, `FLOWRAG_DATASET_ID`, and `FLOWRAG_API_KEY` are set correctly.
-- Confirm the scan directory exists and contains supported files.
-- Check the per-script log file for the HTTP response details.
-
-If live tests skip:
-
-- Set `RUN_LIVE_FLOWRAG_TESTS=1`.
-- Provide the FlowRAG environment variables required by the integration test.

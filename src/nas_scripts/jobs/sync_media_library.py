@@ -106,6 +106,7 @@ def keep_only_english_audio_and_subtitles(
         current_checksum = sha256_file(file_path)
         previous = previous_state.get(relpath)
         if _is_verified_cache_entry_valid(previous, current_checksum):
+            assert previous is not None
             next_state[relpath] = previous
             logger.info("Skipping already verified file: %s", file_path)
             continue

@@ -11,7 +11,6 @@ from dataclasses import replace
 import logging
 import shutil
 import sys
-from pathlib import Path
 
 from nas_scripts.config.organize_temp_media import (
     OrganizeTempMediaConfig,

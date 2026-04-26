@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+if [[ -x "$REPO_ROOT/.venv/bin/ruff" ]]; then
+  RUFF="$REPO_ROOT/.venv/bin/ruff"
+else
+  RUFF="ruff"
+fi
+
+if [[ -x "$REPO_ROOT/.venv/bin/mypy" ]]; then
+  MYPY="$REPO_ROOT/.venv/bin/mypy"
+else
+  MYPY="mypy"
+fi
+
+if [[ -x "$REPO_ROOT/.venv/bin/pytest" ]]; then
+  PYTEST="$REPO_ROOT/.venv/bin/pytest"
+else
+  PYTEST="pytest"
+fi
+
+echo "Running Ruff..."
+"$RUFF" check --fix .
+
+echo "Running MyPy..."
+"$MYPY"
+
+echo "Running tests..."
+"$PYTEST" -q

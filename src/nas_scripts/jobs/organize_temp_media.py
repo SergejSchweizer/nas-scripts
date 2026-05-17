@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 import shutil
 import sys
+from typing import Protocol
 
 from nas_scripts.config.organize_temp_media import (
     OrganizeTempMediaConfig,
@@ -28,23 +29,34 @@ from nas_scripts.utils.locking import AlreadyLockedError, FileLock
 from nas_scripts.utils.logging import setup_script_logger
 
 
-def _resolve_conflict_destination(
-    destination_path: Path,
-    *,
-    policy: str,
-    logger: logging.Logger,
-) -> Path | None:
-    """Resolve destination conflicts according to the configured policy."""
-    if not destination_path.exists():
-        return destination_path
-    if destination_path.is_dir():
-        return None
+class ConflictResolver(Protocol):
+    """Strategy interface for destination conflict handling."""
 
-    if policy == "skip":
+    def resolve(self, destination_path: Path, *, logger: logging.Logger) -> Path | None:
+        """Return resolved destination path, or None to skip this source file."""
+
+
+class OverwriteConflictResolver:
+    """Conflict strategy that overwrites existing destination files."""
+
+    def resolve(self, destination_path: Path, *, logger: logging.Logger) -> Path:
+        destination_path.unlink()
+        logger.info("Overwriting existing file: %s", destination_path)
+        return destination_path
+
+
+class SkipConflictResolver:
+    """Conflict strategy that keeps the existing destination and skips moving."""
+
+    def resolve(self, destination_path: Path, *, logger: logging.Logger) -> None:
         logger.info("Skipping file because destination exists: %s", destination_path)
         return None
 
-    if policy == "rename":
+
+class RenameConflictResolver:
+    """Conflict strategy that keeps existing destination and picks a new file name."""
+
+    def resolve(self, destination_path: Path, *, logger: logging.Logger) -> Path:
         stem = destination_path.stem
         suffix = destination_path.suffix
         counter = 1
@@ -59,9 +71,14 @@ def _resolve_conflict_destination(
                 return candidate
             counter += 1
 
-    destination_path.unlink()
-    logger.info("Overwriting existing file: %s", destination_path)
-    return destination_path
+
+def _build_conflict_resolver(policy: str) -> ConflictResolver:
+    """Factory for conflict-handling strategy selection."""
+    if policy == "skip":
+        return SkipConflictResolver()
+    if policy == "rename":
+        return RenameConflictResolver()
+    return OverwriteConflictResolver()
 
 
 def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -> int:
@@ -78,6 +95,7 @@ def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -
         else collect_top_level_matching_files
     )
     files = file_collector(config.temp_dir, config.file_extensions)
+    conflict_resolver = _build_conflict_resolver(config.conflict_policy)
     logger.info("Found %s matching file(s) in %s", len(files), config.temp_dir)
     if not files:
         logger.info("No matching files found. Nothing to move.")
@@ -104,11 +122,7 @@ def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -
                 print(message, file=sys.stderr)
                 logger.error(message)
                 return 1
-            resolved_destination = _resolve_conflict_destination(
-                destination_path,
-                policy=config.conflict_policy,
-                logger=logger,
-            )
+            resolved_destination = conflict_resolver.resolve(destination_path, logger=logger)
             if resolved_destination is None:
                 continue
             destination_path = resolved_destination

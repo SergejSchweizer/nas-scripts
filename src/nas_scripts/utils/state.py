@@ -1,8 +1,8 @@
 """State file helpers.
 
-This module acts as the persistence layer for the incremental ingestion flow:
-it stores and restores the compact JSON state that tells the job whether a
-document is new, changed, or already processed.
+This module persists sync-media verification metadata:
+it stores and restores compact JSON state so media files can be skipped when
+they are already verified under the current policy.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import Any
 
 
 def load_state(state_file: Path) -> dict[str, dict[str, Any]]:
-    """Load the persisted state map for the incremental ingestion flow."""
+    """Load persisted media verification state."""
     if not state_file.exists():
         return {}
     try:
@@ -23,7 +23,7 @@ def load_state(state_file: Path) -> dict[str, dict[str, Any]]:
 
 
 def save_state(state_file: Path, state: dict[str, dict[str, Any]]) -> None:
-    """Persist the incremental ingestion state atomically."""
+    """Persist media verification state atomically."""
     state_file.parent.mkdir(parents=True, exist_ok=True)
     tmp_file = state_file.with_suffix(f"{state_file.suffix}.tmp")
     tmp_file.write_text(

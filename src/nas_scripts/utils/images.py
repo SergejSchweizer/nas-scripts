@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +25,13 @@ except ImportError:  # pragma: no cover - platform-specific
 
 def has_extension(path: Path, extensions: tuple[str, ...]) -> bool:
     """Decide whether a file should enter the organizer routing step."""
-    return path.suffix.lstrip(".") in set(extensions)
+    return path.suffix.lower().lstrip(".") in _normalized_extensions(extensions)
+
+
+@lru_cache(maxsize=32)
+def _normalized_extensions(extensions: tuple[str, ...]) -> frozenset[str]:
+    """Normalize extension tuple once for repeated membership checks."""
+    return frozenset(ext.lower() for ext in extensions)
 
 
 def collect_matching_files(root: Path, extensions: tuple[str, ...]) -> list[Path]:

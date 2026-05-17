@@ -75,7 +75,7 @@ Behavior:
 | Output | Copied media in `DEST_DIR` |
 | Sync strategy | Copies new files and refreshes destination files when source content changed |
 | Cleanup | Removes stale files and empty directories |
-| Stream filtering | Uses `ffprobe` and `ffmpeg` to remove one non-English audio or subtitle track per run |
+| Stream filtering | Uses `ffprobe` and `ffmpeg` to remove non-English audio and subtitle streams in a single run |
 | Cache | Stores verification state in a checksum-based JSON file |
 | Safety | Uses a lock file to prevent overlapping runs |
 
@@ -88,7 +88,6 @@ python scripts/sync_media_library.py
 
 Important detail:
 
-- A file may need multiple runs before all non-English audio/subtitle tracks are removed.
 - Already verified files are skipped on later runs unless the policy version changes or the file changes.
 - Temporary files created by this script (`.nas_scripts_tmp.*`) under `DEST_DIR` are removed during cleanup.
 
@@ -167,12 +166,18 @@ Environment variables:
 - `VIDEO_EXTENSIONS`
 - `OWNER_USER`
 - `OWNER_GROUP`
+- `CONFLICT_POLICY` (`overwrite`, `skip`, or `rename`)
 
 Defaults:
 
 - `TEMP_DIR`: `/volume1/Temp/Fotos`
 - `LOCK_FILE`: `/tmp/organize_temp_media.lock`
 - `LOG_DIR`: `/volume1/Temp/logs`
+- `CONFLICT_POLICY`: `overwrite`
+
+Notes:
+
+- `FILE_EXTENSIONS`, `RAW_EXTENSIONS`, and `VIDEO_EXTENSIONS` are matched case-insensitively.
 
 ## Execution
 
@@ -267,6 +272,20 @@ Generate an explicit coverage report:
 ```bash
 .venv/bin/pytest --cov=src/nas_scripts --cov-report=term-missing
 ```
+
+Run verbose coverage with test output and branch details:
+
+```bash
+.venv/bin/pytest -vv --cov=src/nas_scripts --cov-branch --cov-report=term-missing
+```
+
+Generate an HTML coverage report:
+
+```bash
+.venv/bin/pytest --cov=src/nas_scripts --cov-branch --cov-report=html
+```
+
+Then open `htmlcov/index.html` in your browser.
 ```
 
 The repository currently includes unit coverage for:
@@ -281,8 +300,6 @@ Some media-sync tests depend on local fixture files under `tests/data/sync_media
 If that directory is missing, those fixture-dependent tests are skipped automatically.
 
 ## Known Limitations
-
-- `sync-media-library` removes one non-English audio/subtitle stream per run, so files with many such streams may require multiple runs.
 
 ## Development Rules
 
@@ -304,4 +321,4 @@ If a job exits immediately:
 If media sync fails:
 
 - Confirm `ffmpeg` and `ffprobe` are installed and on `PATH`.
-- Check whether the file has more than one non-English track and needs another run.
+- Check the job log for verification or remuxing errors for the specific file.

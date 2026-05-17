@@ -43,6 +43,15 @@ The codebase must be understandable by another engineer without tribal knowledge
 - Keep operational docs aligned with code behavior.
 - Do not leave critical behavior changes undocumented.
 
+### Version Control Hygiene
+
+- Use deny-by-default ignore rules: ignore everything in `.gitignore` first, then explicitly allow only required repository files.
+- Keep the allowlist minimal and intentional; do not permit generated artifacts, caches, environments, or local machine state unless explicitly required.
+
+### Continuous Refactoring Loop
+
+- Run a loop in the background to re-analyze the project and apply refactoring suggestions automatically until no refactoring suggestions can be made.
+
 ---
 
 ## Architecture
@@ -68,6 +77,7 @@ Apply these rules when a task involves system design, module boundaries, refacto
 - Avoid monolithic scripts for core logic.
 - Move reusable notebook logic into versioned modules.
 - Prefer composable designs and separation of concerns.
+- Prefer `polars` over `pandas` for dataframe processing when it fits the task and ecosystem constraints.
 - Prioritize long-term maintainability over short-term convenience.
 
 ### Interface and Contract Practices

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import logging
+from pathlib import Path
 import shutil
 import sys
 
@@ -25,6 +26,42 @@ from nas_scripts.utils.images import (
 )
 from nas_scripts.utils.locking import AlreadyLockedError, FileLock
 from nas_scripts.utils.logging import setup_script_logger
+
+
+def _resolve_conflict_destination(
+    destination_path: Path,
+    *,
+    policy: str,
+    logger: logging.Logger,
+) -> Path | None:
+    """Resolve destination conflicts according to the configured policy."""
+    if not destination_path.exists():
+        return destination_path
+    if destination_path.is_dir():
+        return None
+
+    if policy == "skip":
+        logger.info("Skipping file because destination exists: %s", destination_path)
+        return None
+
+    if policy == "rename":
+        stem = destination_path.stem
+        suffix = destination_path.suffix
+        counter = 1
+        while True:
+            candidate = destination_path.with_name(f"{stem}.{counter}{suffix}")
+            if not candidate.exists():
+                logger.info(
+                    "Destination exists for %s; renaming to %s",
+                    destination_path,
+                    candidate,
+                )
+                return candidate
+            counter += 1
+
+    destination_path.unlink()
+    logger.info("Overwriting existing file: %s", destination_path)
+    return destination_path
 
 
 def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -> int:
@@ -67,8 +104,14 @@ def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -
                 print(message, file=sys.stderr)
                 logger.error(message)
                 return 1
-            destination_path.unlink()
-            logger.info("Overwriting existing file: %s", destination_path)
+            resolved_destination = _resolve_conflict_destination(
+                destination_path,
+                policy=config.conflict_policy,
+                logger=logger,
+            )
+            if resolved_destination is None:
+                continue
+            destination_path = resolved_destination
 
         shutil.move(str(source_path), str(destination_path))
 

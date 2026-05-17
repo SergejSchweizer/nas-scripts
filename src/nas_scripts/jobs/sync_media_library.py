@@ -10,6 +10,7 @@ runs.
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -37,16 +38,55 @@ from nas_scripts.utils.state import load_state, save_state
 FILTER_POLICY_VERSION = 2
 
 
+def _build_verified_state_entry(
+    *,
+    checksum: str,
+    size: int,
+    mtime_ns: int,
+) -> dict[str, Any]:
+    """Construct a normalized cache entry for a verified media file."""
+    return {
+        "sha256": checksum,
+        "verified": True,
+        "policy_version": FILTER_POLICY_VERSION,
+        "size": size,
+        "mtime_ns": mtime_ns,
+    }
+
+
 def _is_verified_cache_entry_valid(
     previous: dict[str, Any] | None,
-    current_checksum: str,
+    *,
+    current_size: int,
+    current_mtime_ns: int,
+    current_checksum: str | None = None,
 ) -> bool:
     """Decide whether a cached verification result still applies."""
     if previous is None:
         return False
-    if previous.get("sha256") != current_checksum:
+    if previous.get("policy_version") != FILTER_POLICY_VERSION:
         return False
-    return previous.get("policy_version") == FILTER_POLICY_VERSION
+    if not previous.get("verified", False):
+        return False
+
+    previous_size = previous.get("size")
+    previous_mtime_ns = previous.get("mtime_ns")
+    if isinstance(previous_size, int) and isinstance(previous_mtime_ns, int):
+        return previous_size == current_size and previous_mtime_ns == current_mtime_ns
+
+    if current_checksum is None:
+        return False
+    return previous.get("sha256") == current_checksum
+
+
+def _files_are_definitely_equal_by_stat(source_path: Path, dest_path: Path) -> bool:
+    """Fast-path equality check based on size and integer-second mtime."""
+    source_stat = source_path.stat()
+    dest_stat = dest_path.stat()
+    return (
+        source_stat.st_size == dest_stat.st_size
+        and int(source_stat.st_mtime) == int(dest_stat.st_mtime)
+    )
 
 
 def sync_media_files(
@@ -72,6 +112,9 @@ def sync_media_files(
             copy_file_with_metadata(source_path, dest_path)
             copied_files.append(dest_path)
             logger.info("Copied: %s", relpath)
+            continue
+
+        if _files_are_definitely_equal_by_stat(source_path, dest_path):
             continue
 
         source_checksum = sha256_file(source_path)
@@ -111,14 +154,43 @@ def keep_only_english_audio_and_subtitles(
         file_path = config.dest_dir / relpath
         if not is_media_file(file_path, config.extensions):
             continue
-        current_checksum = sha256_file(file_path)
+        file_stat: os.stat_result = file_path.stat()
+        current_size = file_stat.st_size
+        current_mtime_ns = file_stat.st_mtime_ns
         previous = previous_state.get(relpath)
-        if _is_verified_cache_entry_valid(previous, current_checksum):
+        current_checksum: str | None = None
+        if _is_verified_cache_entry_valid(
+            previous,
+            current_size=current_size,
+            current_mtime_ns=current_mtime_ns,
+        ):
             assert previous is not None
             next_state[relpath] = previous
             logger.info("Skipping already verified file: %s", file_path)
             continue
-        if previous is not None and previous.get("sha256") == current_checksum:
+
+        if previous is not None and previous.get("policy_version") == FILTER_POLICY_VERSION:
+            current_checksum = sha256_file(file_path)
+        if previous is not None and _is_verified_cache_entry_valid(
+            previous,
+            current_size=current_size,
+            current_mtime_ns=current_mtime_ns,
+            current_checksum=current_checksum,
+        ):
+            next_state[relpath] = {
+                **previous,
+                "size": current_size,
+                "mtime_ns": current_mtime_ns,
+            }
+            logger.info("Skipping already verified file: %s", file_path)
+            continue
+
+        if (
+            previous is not None
+            and current_checksum is not None
+            and previous.get("sha256") == current_checksum
+            and previous.get("policy_version") != FILTER_POLICY_VERSION
+        ):
             logger.info(
                 "Rechecking %s because the cached verification policy is outdated.",
                 file_path,
@@ -131,15 +203,17 @@ def keep_only_english_audio_and_subtitles(
 
         non_english_indexes = find_non_english_audio_subtitle_streams(streams)
         if not non_english_indexes:
-            next_state[relpath] = {
-                "sha256": current_checksum,
-                "verified": True,
-                "policy_version": FILTER_POLICY_VERSION,
-            }
+            if current_checksum is None:
+                current_checksum = sha256_file(file_path)
+            next_state[relpath] = _build_verified_state_entry(
+                checksum=current_checksum,
+                size=current_size,
+                mtime_ns=current_mtime_ns,
+            )
             continue
 
         logger.info(
-            "Filtering %s by removing one non-English audio/subtitle stream: %s",
+            "Filtering %s to remove non-English audio/subtitle streams. First stream: %s",
             file_path,
             non_english_indexes[0],
         )
@@ -159,11 +233,12 @@ def keep_only_english_audio_and_subtitles(
 
         remaining_non_english = find_non_english_audio_subtitle_streams(updated_streams)
         if not remaining_non_english:
-            next_state[relpath] = {
-                "sha256": sha256_file(file_path),
-                "verified": True,
-                "policy_version": FILTER_POLICY_VERSION,
-            }
+            updated_stat: os.stat_result = file_path.stat()
+            next_state[relpath] = _build_verified_state_entry(
+                checksum=sha256_file(file_path),
+                size=updated_stat.st_size,
+                mtime_ns=updated_stat.st_mtime_ns,
+            )
             logger.info("Updated file: %s", file_path)
         else:
             logger.info(

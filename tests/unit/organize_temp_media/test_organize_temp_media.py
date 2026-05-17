@@ -39,6 +39,7 @@ def make_config(tmp_path: Path) -> OrganizeTempMediaConfig:
         video_extensions=("mp4", "MP4"),
         owner_user=None,
         owner_group=None,
+        conflict_policy="overwrite",
     )
 
 
@@ -262,6 +263,7 @@ def test_organize_files_reorganizes_nested_files_when_enabled(tmp_path: Path) ->
         video_extensions=config.video_extensions,
         owner_user=config.owner_user,
         owner_group=config.owner_group,
+        conflict_policy=config.conflict_policy,
     )
     config.temp_dir.mkdir(parents=True)
     legacy_dir = config.temp_dir / "2021-04"
@@ -317,3 +319,63 @@ def test_organize_files_logs_progress(tmp_path: Path) -> None:
     log_content = config.log_file.read_text(encoding="utf-8")
     assert "Found 1 matching file(s)" in log_content
     assert "Moved" in log_content
+
+
+def test_organize_files_skips_existing_destination_when_policy_is_skip(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    config = OrganizeTempMediaConfig(
+        script_name=config.script_name,
+        temp_dir=config.temp_dir,
+        lock_file=config.lock_file,
+        log_dir=config.log_dir,
+        reorganize_existing=config.reorganize_existing,
+        file_extensions=config.file_extensions,
+        raw_extensions=config.raw_extensions,
+        video_extensions=config.video_extensions,
+        owner_user=config.owner_user,
+        owner_group=config.owner_group,
+        conflict_policy="skip",
+    )
+    config.temp_dir.mkdir(parents=True)
+    source = config.temp_dir / "photo.jpg"
+    source.write_text("new", encoding="utf-8")
+    destination = config.temp_dir / month_folder_name(source) / "img" / source.name
+    destination.parent.mkdir(parents=True)
+    destination.write_text("old", encoding="utf-8")
+    logger = setup_script_logger(f"organize_temp_media_skip_conflict_{tmp_path.name}", config.log_file)
+
+    assert organize_files(config, logger=logger) == 0
+    assert source.exists()
+    assert destination.read_text(encoding="utf-8") == "old"
+
+
+def test_organize_files_renames_existing_destination_when_policy_is_rename(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    config = OrganizeTempMediaConfig(
+        script_name=config.script_name,
+        temp_dir=config.temp_dir,
+        lock_file=config.lock_file,
+        log_dir=config.log_dir,
+        reorganize_existing=config.reorganize_existing,
+        file_extensions=config.file_extensions,
+        raw_extensions=config.raw_extensions,
+        video_extensions=config.video_extensions,
+        owner_user=config.owner_user,
+        owner_group=config.owner_group,
+        conflict_policy="rename",
+    )
+    config.temp_dir.mkdir(parents=True)
+    source = config.temp_dir / "photo.jpg"
+    source.write_text("new", encoding="utf-8")
+    destination = config.temp_dir / month_folder_name(source) / "img" / source.name
+    destination.parent.mkdir(parents=True)
+    destination.write_text("old", encoding="utf-8")
+    logger = setup_script_logger(
+        f"organize_temp_media_rename_conflict_{tmp_path.name}",
+        config.log_file,
+    )
+
+    assert organize_files(config, logger=logger) == 0
+    assert not source.exists()
+    assert destination.read_text(encoding="utf-8") == "old"
+    assert (destination.parent / "photo.1.jpg").read_text(encoding="utf-8") == "new"

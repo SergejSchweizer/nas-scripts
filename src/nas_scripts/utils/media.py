@@ -11,6 +11,7 @@ import logging
 import shutil
 import subprocess
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -25,7 +26,13 @@ class MediaStream:
 
 def is_media_file(path: Path, extensions: tuple[str, ...]) -> bool:
     """Decide whether a file should enter the media sync workflow."""
-    return path.suffix.lower().lstrip(".") in {ext.lower() for ext in extensions}
+    return path.suffix.lower().lstrip(".") in _normalized_extensions(extensions)
+
+
+@lru_cache(maxsize=32)
+def _normalized_extensions(extensions: tuple[str, ...]) -> frozenset[str]:
+    """Normalize extension tuple once for repeated membership checks."""
+    return frozenset(ext.lower() for ext in extensions)
 
 
 def collect_relative_media_files(root: Path, extensions: tuple[str, ...]) -> list[str]:
@@ -149,81 +156,97 @@ def filter_to_english_audio_and_subtitles(
     ffmpeg_threads: int,
     logger: logging.Logger | None = None,
 ) -> bool:
-    """Remove one non-English audio/subtitle track and verify the output."""
-    streams = probe_streams(file_path)
-    non_english_indexes = find_non_english_audio_subtitle_streams(streams)
-    if not non_english_indexes:
-        if logger is not None:
-            logger.info("No non-English audio/subtitle streams found for %s", file_path)
-        return True
-
-    stream_to_remove = non_english_indexes[0]
-    map_args = build_stream_map_args(streams, excluded_indexes={stream_to_remove})
-    if not map_args:
-        if logger is not None:
-            logger.error(
-                "Skipping %s because filtering would remove every mapped stream.",
-                file_path,
-            )
-        return False
-
+    """Remove non-English audio/subtitle streams and verify a fully clean result."""
+    max_passes = 20
     temp_file = file_path.with_name(f".nas_scripts_tmp.{file_path.suffix.lstrip('.')}")
-    result = subprocess.run(
-        [
-            "ffmpeg",
-            "-threads",
-            str(ffmpeg_threads),
-            "-i",
-            str(file_path),
-            *map_args,
-            "-c",
-            "copy",
-            str(temp_file),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        temp_file.unlink(missing_ok=True)
-        if logger is not None:
-            logger.error("ffmpeg failed while filtering %s", file_path)
-        return False
 
-    try:
-        verified_streams = probe_streams(temp_file)
-    except Exception as exc:  # noqa: BLE001
-        temp_file.unlink(missing_ok=True)
-        if logger is not None:
-            logger.exception("ffprobe failed while verifying %s: %s", temp_file, exc)
-        return False
+    for _ in range(max_passes):
+        streams = probe_streams(file_path)
+        non_english_indexes = find_non_english_audio_subtitle_streams(streams)
+        if not non_english_indexes:
+            if logger is not None:
+                logger.info("No non-English audio/subtitle streams found for %s", file_path)
+            return True
 
-    if logger is not None:
-        logger.info(
-            "Verified audio tracks for %s: %s",
-            file_path,
-            format_audio_streams(verified_streams),
+        stream_to_remove = non_english_indexes[0]
+        map_args = build_stream_map_args(streams, excluded_indexes={stream_to_remove})
+        if not map_args:
+            if logger is not None:
+                logger.error(
+                    "Skipping %s because filtering would remove every mapped stream.",
+                    file_path,
+                )
+            return False
+
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-threads",
+                str(ffmpeg_threads),
+                "-i",
+                str(file_path),
+                *map_args,
+                "-c",
+                "copy",
+                str(temp_file),
+            ],
+            capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            temp_file.unlink(missing_ok=True)
+            if logger is not None:
+                logger.error("ffmpeg failed while filtering %s", file_path)
+            return False
 
-    remaining_non_english = find_non_english_audio_subtitle_streams(verified_streams)
-    if stream_to_remove in remaining_non_english:
-        temp_file.unlink(missing_ok=True)
+        try:
+            verified_streams = probe_streams(temp_file)
+        except Exception as exc:  # noqa: BLE001
+            temp_file.unlink(missing_ok=True)
+            if logger is not None:
+                logger.exception("ffprobe failed while verifying %s: %s", temp_file, exc)
+            return False
+
         if logger is not None:
-            logger.error(
-                "Verification failed for %s. Stream %s was not removed.",
+            logger.info(
+                "Verified audio tracks for %s: %s",
+                file_path,
+                format_audio_streams(verified_streams),
+            )
+
+        remaining_non_english = find_non_english_audio_subtitle_streams(verified_streams)
+        if stream_to_remove in remaining_non_english:
+            temp_file.unlink(missing_ok=True)
+            if logger is not None:
+                logger.error(
+                    "Verification failed for %s. Stream %s was not removed.",
+                    file_path,
+                    stream_to_remove,
+                )
+            return False
+
+        temp_file.replace(file_path)
+        if logger is not None:
+            logger.info(
+                "Removed non-English audio/subtitle stream from %s: %s",
                 file_path,
                 stream_to_remove,
             )
-        return False
 
+        if not remaining_non_english:
+            return True
+
+        if logger is not None:
+            logger.info(
+                "Continuing filtering for %s. Remaining non-English stream(s): %s",
+                file_path,
+                ",".join(str(index) for index in remaining_non_english),
+            )
+
+    temp_file.unlink(missing_ok=True)
     if logger is not None:
-        logger.info(
-            "Removed one non-English audio/subtitle stream from %s: %s",
-            file_path,
-            stream_to_remove,
-        )
-
-    temp_file.replace(file_path)
-    return True
+        logger.error("Filtering exceeded max passes for %s", file_path)
+    return False
 
 
 def remove_leftover_temp_files(root: Path) -> list[Path]:

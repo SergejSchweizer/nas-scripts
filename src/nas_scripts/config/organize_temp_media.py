@@ -14,32 +14,22 @@ from pathlib import Path
 DEFAULT_TEMP_DIR = Path("/volume1/Temp/Fotos")
 DEFAULT_LOCK_FILE = Path("/tmp/organize_temp_media.lock")
 DEFAULT_LOG_DIR = Path("/volume1/Temp/logs")
+DEFAULT_CONFLICT_POLICY = "overwrite"
 DEFAULT_FILE_EXTENSIONS = (
     "arw",
-    "ARW",
     "mov",
-    "MOV",
     "mp4",
-    "MP4",
     "jpg",
-    "JPG",
     "jpeg",
-    "JPEG",
     "png",
-    "PNG",
     "avi",
-    "AVI",
     "gif",
-    "GIF",
     "bmp",
-    "BMP",
     "heic",
-    "HEIC",
     "3gp",
-    "3GP",
 )
-DEFAULT_RAW_EXTENSIONS = ("arw", "ARW")
-DEFAULT_VIDEO_EXTENSIONS = ("mov", "MOV", "mp4", "MP4", "avi", "AVI", "3gp", "3GP")
+DEFAULT_RAW_EXTENSIONS = ("arw",)
+DEFAULT_VIDEO_EXTENSIONS = ("mov", "mp4", "avi", "3gp")
 
 
 @dataclass(frozen=True)
@@ -56,6 +46,7 @@ class OrganizeTempMediaConfig:
     video_extensions: tuple[str, ...]
     owner_user: str | None
     owner_group: str | None
+    conflict_policy: str
 
     @property
     def log_file(self) -> Path:
@@ -67,8 +58,18 @@ def _parse_csv_env(value: str | None, default: tuple[str, ...]) -> tuple[str, ..
     """Parse a comma-separated environment variable into a tuple."""
     if not value:
         return default
-    parts = [part.strip() for part in value.split(",") if part.strip()]
+    parts = [part.strip().lower() for part in value.split(",") if part.strip()]
     return tuple(parts) if parts else default
+
+
+def _parse_conflict_policy(value: str | None) -> str:
+    """Parse and validate conflict handling policy."""
+    if value is None:
+        return DEFAULT_CONFLICT_POLICY
+    normalized = value.strip().lower()
+    if normalized in {"overwrite", "skip", "rename"}:
+        return normalized
+    return DEFAULT_CONFLICT_POLICY
 
 
 def _parse_bool_env(value: str | None, default: bool = False) -> bool:
@@ -105,4 +106,5 @@ def load_organize_temp_media_config() -> OrganizeTempMediaConfig:
         ),
         owner_user=os.environ.get("OWNER_USER") or None,
         owner_group=os.environ.get("OWNER_GROUP") or None,
+        conflict_policy=_parse_conflict_policy(os.environ.get("CONFLICT_POLICY")),
     )

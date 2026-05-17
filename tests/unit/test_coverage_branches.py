@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from nas_scripts.config.organize_temp_media import _parse_bool_env, _parse_csv_env
+from nas_scripts.config.organize_temp_media import (
+    _parse_bool_env,
+    _parse_conflict_policy,
+    _parse_csv_env,
+)
 from nas_scripts.config.sync_media_library import load_sync_media_library_config
 from nas_scripts.jobs.organize_temp_media import main as organize_main
 from nas_scripts.jobs.sync_media_library import main as sync_main
@@ -38,8 +42,11 @@ def test_main_module_exits_with_cli_status(monkeypatch: pytest.MonkeyPatch) -> N
 def test_parse_helpers_cover_invalid_and_empty_inputs() -> None:
     assert _parse_csv_env("", ("jpg",)) == ("jpg",)
     assert _parse_csv_env(" , ", ("jpg",)) == ("jpg",)
+    assert _parse_csv_env(" JPG,ARW ", ("jpg",)) == ("jpg", "arw")
     assert _parse_bool_env("maybe", default=True) is True
     assert _parse_bool_env("off", default=True) is False
+    assert _parse_conflict_policy("rename") == "rename"
+    assert _parse_conflict_policy("invalid") == "overwrite"
 
 
 def test_load_sync_config_parses_extensions_and_threads(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -252,6 +259,7 @@ def test_job_main_returns_zero_when_already_locked(monkeypatch: pytest.MonkeyPat
     org_cfg.video_extensions = ("mp4",)
     org_cfg.owner_user = None
     org_cfg.owner_group = None
+    org_cfg.conflict_policy = "overwrite"
 
     monkeypatch.setattr(
         "nas_scripts.jobs.organize_temp_media.load_organize_temp_media_config",
@@ -276,6 +284,7 @@ def test_organize_files_returns_error_when_temp_dir_missing(tmp_path: Path) -> N
         video_extensions=("mp4",),
         owner_user=None,
         owner_group=None,
+        conflict_policy="overwrite",
     )
     logger = setup_script_logger("organize_missing_dir", cfg.log_file)
     assert organize_files(cfg, logger=logger) == 1
@@ -304,6 +313,7 @@ def test_organize_files_returns_error_if_destination_is_directory(tmp_path: Path
         video_extensions=("mp4",),
         owner_user=None,
         owner_group=None,
+        conflict_policy="overwrite",
     )
     logger = setup_script_logger("organize_dest_dir_error", cfg.log_file)
     assert organize_files(cfg, logger=logger) == 1

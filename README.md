@@ -75,7 +75,7 @@ Behavior:
 | Output | Copied media in `DEST_DIR` |
 | Sync strategy | Copies new files and refreshes destination files when source content changed |
 | Cleanup | Removes stale files and empty directories |
-| Stream filtering | Uses `ffprobe` and `ffmpeg` to remove non-English audio and subtitle streams in a single run |
+| Stream filtering | Uses iterative `ffprobe`/`ffmpeg` passes to remove all non-English audio and subtitle streams |
 | Cache | Stores verification state in a checksum-based JSON file |
 | Safety | Uses a lock file to prevent overlapping runs |
 
@@ -90,6 +90,28 @@ Important detail:
 
 - Already verified files are skipped on later runs unless the policy version changes or the file changes.
 - Temporary files created by this script (`.nas_scripts_tmp.*`) under `DEST_DIR` are removed during cleanup.
+
+Stream filtering internals (`sync-media-library`):
+
+1. The job loads the previous verification state from JSON.
+2. For each destination media file, it checks whether the cached state is still valid by size and `mtime_ns`.
+3. If the cache entry is valid, the file is skipped immediately (no `ffprobe`, no `ffmpeg`).
+4. A `sha256` checksum is computed only when needed for cache reconciliation (not unconditionally).
+5. If probing shows only English audio/subtitle streams (`eng`/`en`), the file is marked verified and no remux is executed.
+6. If non-English streams exist, the filter runs in iterative passes with a maximum of 20 passes per file.
+7. In each pass, exactly one non-English stream is selected (the first matching stream index) and excluded from mapping.
+8. `ffmpeg` remuxes with `-c copy` into `.nas_scripts_tmp.<ext>` so streams are copied without re-encoding.
+9. The temporary output is re-probed; only if verification succeeds is it atomically moved over the original file.
+10. If non-English streams remain, the next pass starts; if none remain, processing for that file stops.
+11. Any leftover `.nas_scripts_tmp.*` files are removed at the end of the job.
+
+Why this avoids unnecessary work:
+
+- Verified files are skipped using cached metadata.
+- Checksums are lazy (computed only for specific validation paths).
+- Clean files never enter `ffmpeg`.
+- `ffmpeg` uses stream copy (`-c copy`) instead of expensive transcoding.
+- Processing stops as soon as the file is fully clean.
 
 ### `organize-temp-media`
 

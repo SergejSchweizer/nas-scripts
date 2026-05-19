@@ -43,6 +43,12 @@ The codebase must be understandable by another engineer without tribal knowledge
 - Keep operational docs aligned with code behavior.
 - Do not leave critical behavior changes undocumented.
 
+### Logging Consistency
+
+- All modules must write to the same logfile.
+- The logfile path must be defined in `config.yaml`.
+- Log entries from different modules must use one unified format and structure.
+
 ### Version Control Hygiene
 
 - Use deny-by-default ignore rules: ignore everything in `.gitignore` first, then explicitly allow only required repository files.

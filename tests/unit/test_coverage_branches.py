@@ -17,6 +17,7 @@ from nas_scripts.jobs.sync_media_library import main as sync_main
 from nas_scripts.utils.locking import AlreadyLockedError, FileLock
 from nas_scripts.utils.logging import setup_script_logger
 from nas_scripts.utils.media import (
+    MediaCommandAdapter,
     MediaStream,
     build_stream_map_args,
     filter_to_english_audio_and_subtitles,
@@ -52,9 +53,11 @@ def test_parse_helpers_cover_invalid_and_empty_inputs() -> None:
 def test_load_sync_config_parses_extensions_and_threads(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEDIA_EXTENSIONS", " MKV, mp4 ")
     monkeypatch.setenv("FFMPEG_THREADS", "3")
+    monkeypatch.setenv("CACHE_VALIDATION_MODE", "stat_only")
     cfg = load_sync_media_library_config()
     assert cfg.extensions == ("mkv", "mp4")
     assert cfg.ffmpeg_threads == 3
+    assert cfg.cache_validation_mode == "stat_only"
 
 
 def test_load_state_returns_empty_for_invalid_json(tmp_path: Path) -> None:
@@ -67,10 +70,22 @@ def test_probe_streams_parses_ffprobe_output(monkeypatch: pytest.MonkeyPatch, tm
     file_path = tmp_path / "movie.mkv"
     file_path.write_text("x", encoding="utf-8")
 
-    def fake_run(*args, **_kwargs):  # type: ignore[no-untyped-def]
-        return DummyResult(stdout="0,video\n1,audio,eng\n2,subtitle,spa\n")
+    class FakeAdapter(MediaCommandAdapter):
+        def run_ffprobe(self, _file_path: Path):
+            return DummyResult(stdout="0,video\n1,audio,eng\n2,subtitle,spa\n")
 
-    monkeypatch.setattr("nas_scripts.utils.media.subprocess.run", fake_run)
+        def run_ffmpeg_copy(
+            self,
+            *,
+            source_path: Path,
+            map_args: list[str],
+            target_path: Path,
+            ffmpeg_threads: int,
+        ):
+            del source_path, map_args, target_path, ffmpeg_threads
+            return DummyResult(returncode=0)
+
+    monkeypatch.setattr("nas_scripts.utils.media._build_media_command_adapter", lambda: FakeAdapter())
     streams = probe_streams(file_path)
     assert streams == [
         MediaStream(index=0, codec_type="video", language=None),
@@ -106,10 +121,22 @@ def test_filter_to_english_returns_false_when_ffmpeg_fails(
             MediaStream(index=1, codec_type="audio", language="rus"),
         ],
     )
-    monkeypatch.setattr(
-        "nas_scripts.utils.media.subprocess.run",
-        lambda *args, **_kwargs: DummyResult(returncode=1),  # type: ignore[no-untyped-def]
-    )
+    class FakeAdapter(MediaCommandAdapter):
+        def run_ffprobe(self, _file_path: Path):
+            raise AssertionError("unused in this test")
+
+        def run_ffmpeg_copy(
+            self,
+            *,
+            source_path: Path,
+            map_args: list[str],
+            target_path: Path,
+            ffmpeg_threads: int,
+        ):
+            del source_path, map_args, target_path, ffmpeg_threads
+            return DummyResult(returncode=1)
+
+    monkeypatch.setattr("nas_scripts.utils.media._build_media_command_adapter", lambda: FakeAdapter())
     assert not filter_to_english_audio_and_subtitles(file_path, ffmpeg_threads=1)
 
 
@@ -144,10 +171,23 @@ def test_filter_to_english_returns_false_when_verify_probe_fails(
         return []
 
     monkeypatch.setattr("nas_scripts.utils.media.probe_streams", fake_probe)
-    monkeypatch.setattr(
-        "nas_scripts.utils.media.subprocess.run",
-        lambda *args, **_kwargs: DummyResult(returncode=0),  # type: ignore[no-untyped-def]
-    )
+    class FakeAdapter(MediaCommandAdapter):
+        def run_ffprobe(self, _file_path: Path):
+            raise AssertionError("unused in this test")
+
+        def run_ffmpeg_copy(
+            self,
+            *,
+            source_path: Path,
+            map_args: list[str],
+            target_path: Path,
+            ffmpeg_threads: int,
+        ):
+            del source_path, map_args, ffmpeg_threads
+            target_path.write_text("tmp", encoding="utf-8")
+            return DummyResult(returncode=0)
+
+    monkeypatch.setattr("nas_scripts.utils.media._build_media_command_adapter", lambda: FakeAdapter())
     assert not filter_to_english_audio_and_subtitles(file_path, ffmpeg_threads=1)
 
 

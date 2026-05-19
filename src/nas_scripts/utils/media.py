@@ -13,6 +13,7 @@ import subprocess
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Protocol
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,73 @@ class MediaStream:
     index: int
     codec_type: str
     language: str | None
+
+
+class MediaCommandAdapter(Protocol):
+    """Port interface for ffprobe/ffmpeg command execution."""
+
+    def run_ffprobe(self, file_path: Path) -> subprocess.CompletedProcess[str]:
+        """Run ffprobe and return its completed process output."""
+
+    def run_ffmpeg_copy(
+        self,
+        *,
+        source_path: Path,
+        map_args: list[str],
+        target_path: Path,
+        ffmpeg_threads: int,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run ffmpeg stream-copy with explicit map arguments."""
+
+
+class SubprocessMediaCommandAdapter:
+    """Default adapter that delegates to subprocess for media commands."""
+
+    def run_ffprobe(self, file_path: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=index,codec_type:stream_tags=language",
+                "-of",
+                "csv=p=0",
+                str(file_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+    def run_ffmpeg_copy(
+        self,
+        *,
+        source_path: Path,
+        map_args: list[str],
+        target_path: Path,
+        ffmpeg_threads: int,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                "ffmpeg",
+                "-threads",
+                str(ffmpeg_threads),
+                "-i",
+                str(source_path),
+                *map_args,
+                "-c",
+                "copy",
+                str(target_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+
+def _build_media_command_adapter() -> MediaCommandAdapter:
+    """Factory for media command adapter selection."""
+    return SubprocessMediaCommandAdapter()
 
 
 def is_media_file(path: Path, extensions: tuple[str, ...]) -> bool:
@@ -77,21 +145,8 @@ def remove_empty_directories(root: Path) -> list[Path]:
 
 def probe_streams(file_path: Path) -> list[MediaStream]:
     """Inspect a media file so the filtering strategy can choose kept streams."""
-    result = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "stream=index,codec_type:stream_tags=language",
-            "-of",
-            "csv=p=0",
-            str(file_path),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    adapter = _build_media_command_adapter()
+    result = adapter.run_ffprobe(file_path)
     streams: list[MediaStream] = []
     for line in result.stdout.splitlines():
         if not line.strip():
@@ -159,6 +214,7 @@ def filter_to_english_audio_and_subtitles(
     """Remove non-English audio/subtitle streams and verify a fully clean result."""
     max_passes = 20
     temp_file = file_path.with_name(f".nas_scripts_tmp.{file_path.suffix.lstrip('.')}")
+    adapter = _build_media_command_adapter()
 
     for _ in range(max_passes):
         streams = probe_streams(file_path)
@@ -178,20 +234,11 @@ def filter_to_english_audio_and_subtitles(
                 )
             return False
 
-        result = subprocess.run(
-            [
-                "ffmpeg",
-                "-threads",
-                str(ffmpeg_threads),
-                "-i",
-                str(file_path),
-                *map_args,
-                "-c",
-                "copy",
-                str(temp_file),
-            ],
-            capture_output=True,
-            text=True,
+        result = adapter.run_ffmpeg_copy(
+            source_path=file_path,
+            map_args=map_args,
+            target_path=temp_file,
+            ffmpeg_threads=ffmpeg_threads,
         )
         if result.returncode != 0:
             temp_file.unlink(missing_ok=True)
@@ -215,13 +262,12 @@ def filter_to_english_audio_and_subtitles(
             )
 
         remaining_non_english = find_non_english_audio_subtitle_streams(verified_streams)
-        if stream_to_remove in remaining_non_english:
+        if len(remaining_non_english) >= len(non_english_indexes):
             temp_file.unlink(missing_ok=True)
             if logger is not None:
                 logger.error(
-                    "Verification failed for %s. Stream %s was not removed.",
+                    "Verification failed for %s. Non-English stream count did not decrease.",
                     file_path,
-                    stream_to_remove,
                 )
             return False
 

@@ -18,6 +18,7 @@ DEFAULT_LOCK_FILE = Path("/tmp/media.lock")
 DEFAULT_LOG_DIR = Path("/volume1/Temp/logs")
 DEFAULT_STATE_FILE = DEFAULT_LOG_DIR / "sync_media_library.state.json"
 DEFAULT_EXTENSIONS = ("mpg", "avi", "mp4", "mkv")
+DEFAULT_CACHE_VALIDATION_MODE = "stat_then_checksum"
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class SyncMediaLibraryConfig:
     state_file: Path
     extensions: tuple[str, ...]
     ffmpeg_threads: int
+    cache_validation_mode: str = DEFAULT_CACHE_VALIDATION_MODE
 
     @property
     def log_file(self) -> Path:
@@ -47,6 +49,15 @@ def load_sync_media_library_config() -> SyncMediaLibraryConfig:
         if extensions_raw
         else DEFAULT_EXTENSIONS
     )
+    cache_validation_mode_raw = os.environ.get(
+        "CACHE_VALIDATION_MODE",
+        DEFAULT_CACHE_VALIDATION_MODE,
+    ).strip().lower()
+    cache_validation_mode = (
+        cache_validation_mode_raw
+        if cache_validation_mode_raw in {"stat_only", "stat_then_checksum"}
+        else DEFAULT_CACHE_VALIDATION_MODE
+    )
 
     return SyncMediaLibraryConfig(
         script_name="sync_media_library",
@@ -57,4 +68,5 @@ def load_sync_media_library_config() -> SyncMediaLibraryConfig:
         state_file=Path(os.environ.get("STATE_FILE", str(DEFAULT_STATE_FILE))),
         extensions=extensions,
         ffmpeg_threads=int(os.environ.get("FFMPEG_THREADS", "1")),
+        cache_validation_mode=cache_validation_mode,
     )

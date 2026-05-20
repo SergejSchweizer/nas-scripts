@@ -59,6 +59,8 @@ class SubprocessMediaCommandAdapter:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
         )
 
@@ -84,6 +86,8 @@ class SubprocessMediaCommandAdapter:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
 
 
@@ -205,6 +209,11 @@ def format_audio_streams(streams: list[MediaStream]) -> str:
     return ", ".join(audio_streams) if audio_streams else "none"
 
 
+def format_stream(stream: MediaStream) -> str:
+    """Render a single stream for removal logs."""
+    return f"{stream.index}:{stream.codec_type}:{stream.language or 'unknown'}"
+
+
 def filter_to_english_audio_and_subtitles(
     file_path: Path,
     *,
@@ -225,6 +234,10 @@ def filter_to_english_audio_and_subtitles(
             return True
 
         stream_to_remove = non_english_indexes[0]
+        stream_to_remove_details = next(
+            (stream for stream in streams if stream.index == stream_to_remove),
+            None,
+        )
         map_args = build_stream_map_args(streams, excluded_indexes={stream_to_remove})
         if not map_args:
             if logger is not None:
@@ -276,7 +289,11 @@ def filter_to_english_audio_and_subtitles(
             logger.info(
                 "Removed non-English audio/subtitle stream from %s: %s",
                 file_path,
-                stream_to_remove,
+                (
+                    format_stream(stream_to_remove_details)
+                    if stream_to_remove_details is not None
+                    else str(stream_to_remove)
+                ),
             )
 
         if not remaining_non_english:

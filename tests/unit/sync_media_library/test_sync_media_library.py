@@ -779,9 +779,11 @@ def test_filter_to_english_audio_and_subtitles_verifies_output_before_replacing(
         handler.flush()
 
     assert file_path.read_text(encoding="utf-8") == "filtered"
-    assert "Removed non-English audio/subtitle stream" in log_file.read_text(encoding="utf-8")
-    assert "Continuing filtering for" in log_file.read_text(encoding="utf-8")
-    assert "Verified audio tracks for" in log_file.read_text(encoding="utf-8")
+    log_text = log_file.read_text(encoding="utf-8")
+    assert "Removed non-English audio/subtitle stream" in log_text
+    assert "2:audio:rus" in log_text
+    assert "Continuing filtering for" in log_text
+    assert "Verified audio tracks for" in log_text
 
 
 def test_format_audio_streams_renders_audio_indexes_and_languages() -> None:

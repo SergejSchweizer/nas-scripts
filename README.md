@@ -169,16 +169,16 @@ Why this avoids unnecessary work:
 - `ffmpeg` uses stream copy (`-c copy`) instead of expensive transcoding.
 - Processing stops as soon as the file is fully clean.
 
-### `organize-temp-media`
+### `organize-temp-media` and `organize-temp-downloads`
 
-Purpose: sort temporary photos and videos into dated folders.
+Purpose: sort temporary photos, videos, and downloads into dated folders.
 
 Behavior:
 
 | Item | Details |
 | --- | --- |
 | Input | Matching files in `TEMP_DIR` |
-| Output | `YYYY-MM/raw`, `YYYY-MM/img`, or `YYYY-MM/vid` |
+| Output | `organize-temp-media`: `YYYY-MM/raw`, `YYYY-MM/img`, or `YYYY-MM/vid`; `organize-temp-downloads`: `YYYY-MM` only |
 | Default scan mode | Top-level files only |
 | Optional scan mode | `--reorganize-existing` scans nested legacy folders too |
 | Safety | Uses a lock file to prevent overlapping runs |
@@ -197,7 +197,7 @@ python scripts/organize_temp_downloads.py
 Flow graph:
 
 ```text
-TEMP_DIR --> collect matching files --> build destination bucket (YYYY-MM/raw|img|vid)
+TEMP_DIR --> collect matching files --> build destination bucket (YYYY-MM or YYYY-MM/raw|img|vid)
                                          |
                                          v
                             resolve conflicts (overwrite|skip|rename)
@@ -274,6 +274,7 @@ Defaults:
 Notes:
 
 - `FILE_EXTENSIONS`, `RAW_EXTENSIONS`, and `VIDEO_EXTENSIONS` are matched case-insensitively.
+- `organize-temp-downloads` uses the same file extensions but does not split files into `img/`, `vid/`, or `raw/` subfolders.
 
 ## Execution
 

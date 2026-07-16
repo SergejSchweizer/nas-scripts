@@ -23,6 +23,7 @@ from nas_scripts.utils.images import (
     build_destination_dir,
     collect_matching_files,
     collect_top_level_matching_files,
+    month_folder_name,
     set_path_timestamp_from_source,
 )
 from nas_scripts.utils.locking import AlreadyLockedError, FileLock
@@ -85,6 +86,18 @@ def _build_conflict_resolver(policy: str) -> ConflictResolver:
     return OverwriteConflictResolver()
 
 
+def _build_destination_dir(source_path: Path, config: OrganizeTempMediaConfig) -> Path:
+    """Resolve the destination directory for the configured organizer layout."""
+    if config.destination_layout == "month_only":
+        return config.temp_dir / month_folder_name(source_path)
+    return build_destination_dir(
+        source_path,
+        temp_dir=config.temp_dir,
+        raw_extensions=config.raw_extensions,
+        video_extensions=config.video_extensions,
+    )
+
+
 def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -> int:
     """Run the organizer facade once and return an exit status."""
     if not config.temp_dir.exists():
@@ -108,12 +121,7 @@ def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -
         return 0
 
     for source_path in files:
-        destination_dir = build_destination_dir(
-            source_path,
-            temp_dir=config.temp_dir,
-            raw_extensions=config.raw_extensions,
-            video_extensions=config.video_extensions,
-        )
+        destination_dir = _build_destination_dir(source_path, config)
         destination_path = destination_dir / source_path.name
 
         if source_path == destination_path:

@@ -12,7 +12,9 @@ from pathlib import Path
 
 
 DEFAULT_TEMP_DIR = Path("/volume1/Temp/Fotos")
+DEFAULT_DOWNLOADS_TEMP_DIR = Path("/volume1/Temp/Downloads")
 DEFAULT_LOCK_FILE = Path("/tmp/organize_temp_media.lock")
+DEFAULT_DOWNLOADS_LOCK_FILE = Path("/tmp/organize_temp_downloads.lock")
 DEFAULT_LOG_DIR = Path("/volume1/Temp/logs")
 DEFAULT_CONFLICT_POLICY = "overwrite"
 DEFAULT_FILE_EXTENSIONS = (
@@ -86,12 +88,17 @@ def _parse_bool_env(value: str | None, default: bool = False) -> bool:
     return default
 
 
-def load_organize_temp_media_config() -> OrganizeTempMediaConfig:
-    """Load organizer settings from environment variables."""
+def _load_organize_temp_config(
+    *,
+    script_name: str,
+    default_temp_dir: Path,
+    default_lock_file: Path,
+) -> OrganizeTempMediaConfig:
+    """Load shared organizer settings from environment variables."""
     return OrganizeTempMediaConfig(
-        script_name="organize_temp_media",
-        temp_dir=Path(os.environ.get("TEMP_DIR", str(DEFAULT_TEMP_DIR))),
-        lock_file=Path(os.environ.get("LOCK_FILE", str(DEFAULT_LOCK_FILE))),
+        script_name=script_name,
+        temp_dir=Path(os.environ.get("TEMP_DIR", str(default_temp_dir))),
+        lock_file=Path(os.environ.get("LOCK_FILE", str(default_lock_file))),
         log_dir=Path(os.environ.get("LOG_DIR", str(DEFAULT_LOG_DIR))),
         reorganize_existing=_parse_bool_env(os.environ.get("REORGANIZE_EXISTING")),
         file_extensions=_parse_csv_env(
@@ -109,4 +116,22 @@ def load_organize_temp_media_config() -> OrganizeTempMediaConfig:
         owner_user=os.environ.get("OWNER_USER") or None,
         owner_group=os.environ.get("OWNER_GROUP") or None,
         conflict_policy=_parse_conflict_policy(os.environ.get("CONFLICT_POLICY")),
+    )
+
+
+def load_organize_temp_media_config() -> OrganizeTempMediaConfig:
+    """Load photo organizer settings from environment variables."""
+    return _load_organize_temp_config(
+        script_name="organize_temp_media",
+        default_temp_dir=DEFAULT_TEMP_DIR,
+        default_lock_file=DEFAULT_LOCK_FILE,
+    )
+
+
+def load_organize_temp_downloads_config() -> OrganizeTempMediaConfig:
+    """Load downloads organizer settings from environment variables."""
+    return _load_organize_temp_config(
+        script_name="organize_temp_downloads",
+        default_temp_dir=DEFAULT_DOWNLOADS_TEMP_DIR,
+        default_lock_file=DEFAULT_DOWNLOADS_LOCK_FILE,
     )

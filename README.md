@@ -2,10 +2,11 @@
 
 Python automation for NAS workflows.
 
-This repository contains two NAS jobs:
+This repository contains three NAS commands:
 
 - `sync-media-library`: mirror media into a library and filter non-English streams
 - `organize-temp-media`: sort temporary photos and videos into dated folders
+- `organize-temp-downloads`: sort temporary downloads into dated folders
 
 ## Table Of Contents
 
@@ -29,7 +30,7 @@ Install dependencies and run the test suite:
 
 ```bash
 . .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -e .[dev]
 .venv/bin/pytest -q
 ```
 
@@ -187,7 +188,10 @@ Entry points:
 ```bash
 python -m nas_scripts organize-temp-media
 python -m nas_scripts organize-temp-media --reorganize-existing
+python -m nas_scripts organize-temp-downloads
+python -m nas_scripts organize-temp-downloads --reorganize-existing
 python scripts/organize_temp_media.py
+python scripts/organize_temp_downloads.py
 ```
 
 Flow graph:
@@ -262,8 +266,8 @@ Environment variables:
 
 Defaults:
 
-- `TEMP_DIR`: `/volume1/Temp/Fotos`
-- `LOCK_FILE`: `/tmp/organize_temp_media.lock`
+- `TEMP_DIR`: `/volume1/Temp/Fotos` for `organize-temp-media`, `/volume1/Temp/Downloads` for `organize-temp-downloads`
+- `LOCK_FILE`: `/tmp/organize_temp_media.lock` for `organize-temp-media`, `/tmp/organize_temp_downloads.lock` for `organize-temp-downloads`
 - `LOG_DIR`: `/volume1/Temp/logs`
 - `CONFLICT_POLICY`: `overwrite`
 
@@ -278,6 +282,7 @@ Notes:
 ```bash
 python -m nas_scripts sync-media-library
 python -m nas_scripts organize-temp-media
+python -m nas_scripts organize-temp-downloads
 ```
 
 ### Direct Scripts
@@ -285,6 +290,7 @@ python -m nas_scripts organize-temp-media
 ```bash
 python scripts/sync_media_library.py
 python scripts/organize_temp_media.py
+python scripts/organize_temp_downloads.py
 ```
 
 ### Cron Examples
@@ -299,11 +305,12 @@ Temp organizer:
 
 ```bash
 15 23 * * * cd /path/to/nas-scripts && /path/to/nas-scripts/.venv/bin/python -m nas_scripts organize-temp-media
+30 23 * * * cd /path/to/nas-scripts && /path/to/nas-scripts/.venv/bin/python -m nas_scripts organize-temp-downloads
 ```
 
 ## System Dependencies
 
-Python dependencies live in `requirements.txt` and `pyproject.toml`.
+Python dependencies live in `pyproject.toml`.
 
 The media sync job also needs:
 

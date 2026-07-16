@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 import shutil
 import sys
-from typing import Protocol
+from typing import Callable, Protocol
 
 from nas_scripts.config.organize_temp_media import (
     OrganizeTempMediaConfig,
@@ -27,6 +27,9 @@ from nas_scripts.utils.images import (
 )
 from nas_scripts.utils.locking import AlreadyLockedError, FileLock
 from nas_scripts.utils.logging import setup_script_logger
+
+
+ConfigLoader = Callable[[], OrganizeTempMediaConfig]
 
 
 class ConflictResolver(Protocol):
@@ -159,9 +162,13 @@ def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -
     return 0
 
 
-def main(*, reorganize_existing: bool | None = None) -> int:
-    """Compose the organizer workflow from config, logging, and locking."""
-    config = load_organize_temp_media_config()
+def run_organizer(
+    config_loader: ConfigLoader,
+    *,
+    reorganize_existing: bool | None = None,
+) -> int:
+    """Compose an organizer workflow from config, logging, and locking."""
+    config = config_loader()
     if reorganize_existing is not None:
         config = replace(config, reorganize_existing=reorganize_existing)
     logger = setup_script_logger(config.script_name, config.log_file)
@@ -173,3 +180,11 @@ def main(*, reorganize_existing: bool | None = None) -> int:
         print("Another instance is already running. Exiting.")
         logger.warning("Another instance is already running. Exiting.")
         return 0
+
+
+def main(*, reorganize_existing: bool | None = None) -> int:
+    """Run the temporary photo organizer workflow."""
+    return run_organizer(
+        load_organize_temp_media_config,
+        reorganize_existing=reorganize_existing,
+    )

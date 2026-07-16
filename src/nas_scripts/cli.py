@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 
+from nas_scripts.jobs.organize_temp_downloads import main as organize_temp_downloads_main
 from nas_scripts.jobs.organize_temp_media import main as organize_temp_media_main
 from nas_scripts.jobs.sync_media_library import main as sync_media_library_main
 
@@ -39,6 +40,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     organize_parser.set_defaults(
         handler=lambda args: organize_temp_media_main(
+            reorganize_existing=args.reorganize_existing,
+        )
+    )
+
+    downloads_parser = subparsers.add_parser(
+        "organize-temp-downloads",
+        help="Sort temporary downloads into dated media folders.",
+    )
+    downloads_parser.add_argument(
+        "--reorganize-existing",
+        action="store_true",
+        help="Also scan existing subdirectories and reorganize older folder layouts into raw/img/vid.",
+    )
+    downloads_parser.set_defaults(
+        handler=lambda args: organize_temp_downloads_main(
             reorganize_existing=args.reorganize_existing,
         )
     )

@@ -3,13 +3,15 @@
 
 # Allow only repository source, tests, scripts, hooks, and core metadata.
 !.gitignore
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
 !.githooks/
 !.githooks/pre-commit
 !README.md
 !AGENT.md
 !AGENTS.md
 !pyproject.toml
-!requirements.txt
 !src/
 !src/**
 !tests/

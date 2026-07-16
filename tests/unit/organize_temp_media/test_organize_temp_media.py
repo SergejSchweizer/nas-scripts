@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from nas_scripts.cli import main as cli_main
-from nas_scripts.config.organize_temp_media import OrganizeTempMediaConfig
+from nas_scripts.config.organize_temp_media import (
+    OrganizeTempMediaConfig,
+    load_organize_temp_downloads_config,
+)
+from nas_scripts.jobs.organize_temp_downloads import main as downloads_main
 from nas_scripts.jobs.organize_temp_media import main, organize_files
 from nas_scripts.utils.images import (
     build_destination_dir,
@@ -102,6 +106,33 @@ def test_cli_passes_reorganize_existing_flag(monkeypatch) -> None:
 
     assert cli_main() == 0
     assert called["reorganize_existing"] is True
+
+
+def test_cli_runs_organize_temp_downloads_command(monkeypatch) -> None:
+    called: dict[str, bool | None] = {}
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["nas-scripts", "organize-temp-downloads", "--reorganize-existing"],
+    )
+    monkeypatch.setattr(
+        "nas_scripts.cli.organize_temp_downloads_main",
+        lambda reorganize_existing=None: _record_cli_call(called, reorganize_existing),
+    )
+
+    assert cli_main() == 0
+    assert called["reorganize_existing"] is True
+
+
+def test_load_organize_temp_downloads_config_uses_downloads_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("TEMP_DIR", raising=False)
+    monkeypatch.delenv("LOCK_FILE", raising=False)
+
+    config = load_organize_temp_downloads_config()
+
+    assert config.script_name == "organize_temp_downloads"
+    assert config.temp_dir == Path("/volume1/Temp/Downloads")
+    assert config.lock_file == Path("/tmp/organize_temp_downloads.lock")
 
 
 def test_build_destination_dir_uses_raw_subfolder_for_raw_extensions(tmp_path: Path) -> None:
@@ -301,6 +332,24 @@ def test_main_can_override_reorganize_existing(monkeypatch, tmp_path: Path) -> N
     )
 
     assert main(reorganize_existing=True) == 0
+    assert seen["reorganize_existing"] is True
+
+
+def test_downloads_main_uses_downloads_config(monkeypatch, tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    config.temp_dir.mkdir(parents=True)
+    seen: dict[str, bool] = {}
+
+    monkeypatch.setattr(
+        "nas_scripts.jobs.organize_temp_downloads.load_organize_temp_downloads_config",
+        lambda: config,
+    )
+    monkeypatch.setattr(
+        "nas_scripts.jobs.organize_temp_media.organize_files",
+        lambda cfg, logger: _record_reorganize_flag(seen, cfg.reorganize_existing),
+    )
+
+    assert downloads_main(reorganize_existing=True) == 0
     assert seen["reorganize_existing"] is True
 
 

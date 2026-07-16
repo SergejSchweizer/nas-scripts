@@ -17,6 +17,8 @@ DEFAULT_LOCK_FILE = Path("/tmp/organize_temp_media.lock")
 DEFAULT_DOWNLOADS_LOCK_FILE = Path("/tmp/organize_temp_downloads.lock")
 DEFAULT_LOG_DIR = Path("/volume1/Temp/logs")
 DEFAULT_CONFLICT_POLICY = "overwrite"
+DEFAULT_DESTINATION_LAYOUT = "categorized"
+DEFAULT_DOWNLOADS_DESTINATION_LAYOUT = "month_only"
 DEFAULT_FILE_EXTENSIONS = (
     "arw",
     "mov",
@@ -49,6 +51,7 @@ class OrganizeTempMediaConfig:
     owner_user: str | None
     owner_group: str | None
     conflict_policy: str
+    destination_layout: str = DEFAULT_DESTINATION_LAYOUT
 
     @property
     def log_file(self) -> Path:
@@ -93,6 +96,7 @@ def _load_organize_temp_config(
     script_name: str,
     default_temp_dir: Path,
     default_lock_file: Path,
+    destination_layout: str,
 ) -> OrganizeTempMediaConfig:
     """Load shared organizer settings from environment variables."""
     return OrganizeTempMediaConfig(
@@ -116,6 +120,7 @@ def _load_organize_temp_config(
         owner_user=os.environ.get("OWNER_USER") or None,
         owner_group=os.environ.get("OWNER_GROUP") or None,
         conflict_policy=_parse_conflict_policy(os.environ.get("CONFLICT_POLICY")),
+        destination_layout=destination_layout,
     )
 
 
@@ -125,6 +130,7 @@ def load_organize_temp_media_config() -> OrganizeTempMediaConfig:
         script_name="organize_temp_media",
         default_temp_dir=DEFAULT_TEMP_DIR,
         default_lock_file=DEFAULT_LOCK_FILE,
+        destination_layout=DEFAULT_DESTINATION_LAYOUT,
     )
 
 
@@ -134,4 +140,5 @@ def load_organize_temp_downloads_config() -> OrganizeTempMediaConfig:
         script_name="organize_temp_downloads",
         default_temp_dir=DEFAULT_DOWNLOADS_TEMP_DIR,
         default_lock_file=DEFAULT_DOWNLOADS_LOCK_FILE,
+        destination_layout=DEFAULT_DOWNLOADS_DESTINATION_LAYOUT,
     )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import runpy
 from pathlib import Path
 
@@ -293,6 +294,37 @@ def test_setup_logger_handles_both_file_paths_failing(monkeypatch: pytest.Monkey
     monkeypatch.chdir(tmp_path)
     logger = setup_script_logger("no_file_test", Path("/nonwritable/.logs/no_file_test.log"))
     assert len(logger.handlers) == 1
+
+
+def test_setup_logger_compresses_and_deletes_rotated_logs(tmp_path: Path) -> None:
+    log_file = tmp_path / ".logs" / "retention.log"
+    log_file.parent.mkdir()
+    active_log = log_file
+    active_log.write_text("active", encoding="utf-8")
+    recent_rotated = log_file.with_name("retention.log.2026-07-01")
+    compressible_rotated = log_file.with_name("retention.log.2026-06-01")
+    expired_archive = log_file.with_name("retention.log.2026-03-01.gz")
+    unrelated_file = log_file.with_name("other.log.2026-03-01")
+
+    for path in (recent_rotated, compressible_rotated, expired_archive, unrelated_file):
+        path.write_text(path.name, encoding="utf-8")
+
+    now = 1_000_000_000
+    os.utime(recent_rotated, (now - 10 * 24 * 60 * 60, now - 10 * 24 * 60 * 60))
+    os.utime(compressible_rotated, (now - 30 * 24 * 60 * 60, now - 30 * 24 * 60 * 60))
+    os.utime(expired_archive, (now - 100 * 24 * 60 * 60, now - 100 * 24 * 60 * 60))
+    os.utime(unrelated_file, (now - 100 * 24 * 60 * 60, now - 100 * 24 * 60 * 60))
+
+    from nas_scripts.utils.logging import _maintain_log_archives
+
+    _maintain_log_archives(log_file, now=now)
+
+    assert active_log.exists()
+    assert recent_rotated.exists()
+    assert not compressible_rotated.exists()
+    assert compressible_rotated.with_name(f"{compressible_rotated.name}.gz").exists()
+    assert not expired_archive.exists()
+    assert unrelated_file.exists()
 
 
 def test_job_main_returns_zero_when_already_locked(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

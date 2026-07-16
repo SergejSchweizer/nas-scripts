@@ -214,6 +214,7 @@ Logging:
 
 - Each job writes to its own log file under `LOG_DIR`.
 - Logs use a shared format with timestamp, level, script name, and process id.
+- Rotated log files stay uncompressed for 3 weeks, are compressed with gzip after that, and are deleted after 3 months.
 - If the configured log directory cannot be created, the logger falls back to a local `./.logs/` directory when possible.
 
 State:
@@ -403,6 +404,7 @@ If that directory is missing, those fixture-dependent tests are skipped automati
 - Keep jobs isolated from each other.
 - Update or add tests when behavior changes.
 - Keep log output expressive and consistent.
+- Use Conventional Commits for commit messages and pull request titles, for example `fix(logging): compress old rotated logs`.
 
 ## Troubleshooting
 

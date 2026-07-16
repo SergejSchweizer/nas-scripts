@@ -294,20 +294,26 @@ def test_build_stream_map_args_keeps_only_english_audio_and_subtitles() -> None:
     ]
 
 
-def test_run_job_fails_when_source_missing(tmp_path: Path, capsys) -> None:
+def test_run_job_fails_when_source_missing(tmp_path: Path) -> None:
     config = make_config(tmp_path)
     config.dest_dir.mkdir(parents=True)
+    logger = setup_script_logger("sync_missing_source", config.log_file)
 
-    assert run_job(config, logger=DummyLogger()) == 1
-    assert "source directory does not exist" in capsys.readouterr().err
+    assert run_job(config, logger=logger) == 1
+    for handler in logger.handlers:
+        handler.flush()
+    assert "source directory does not exist" in config.log_file.read_text(encoding="utf-8")
 
 
-def test_run_job_fails_when_dest_missing(tmp_path: Path, capsys) -> None:
+def test_run_job_fails_when_dest_missing(tmp_path: Path) -> None:
     config = make_config(tmp_path)
     config.source_dir.mkdir(parents=True)
+    logger = setup_script_logger("sync_missing_dest", config.log_file)
 
-    assert run_job(config, logger=DummyLogger()) == 1
-    assert "destination directory does not exist" in capsys.readouterr().err
+    assert run_job(config, logger=logger) == 1
+    for handler in logger.handlers:
+        handler.flush()
+    assert "destination directory does not exist" in config.log_file.read_text(encoding="utf-8")
 
 
 def test_collect_relative_files_lists_all_files(tmp_path: Path) -> None:

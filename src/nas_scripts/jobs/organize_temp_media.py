@@ -11,7 +11,6 @@ from dataclasses import replace
 import logging
 from pathlib import Path
 import shutil
-import sys
 from typing import Callable, Protocol
 
 from nas_scripts.config.organize_temp_media import (
@@ -102,7 +101,6 @@ def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -
     """Run the organizer facade once and return an exit status."""
     if not config.temp_dir.exists():
         message = f"Error: temp directory does not exist: {config.temp_dir}"
-        print(message, file=sys.stderr)
         logger.error(message)
         return 1
 
@@ -132,7 +130,6 @@ def organize_files(config: OrganizeTempMediaConfig, *, logger: logging.Logger) -
         if destination_path.exists():
             if destination_path.is_dir():
                 message = f"Cannot overwrite directory with file: {destination_path}"
-                print(message, file=sys.stderr)
                 logger.error(message)
                 return 1
             # Conflict policy is centralized behind a strategy to keep workflow linear.
@@ -185,7 +182,6 @@ def run_organizer(
         with FileLock(config.lock_file):
             return organize_files(config, logger=logger)
     except AlreadyLockedError:
-        print("Another instance is already running. Exiting.")
         logger.warning("Another instance is already running. Exiting.")
         return 0
 

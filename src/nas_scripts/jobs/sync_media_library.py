@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -567,13 +566,11 @@ def run_job(config: SyncMediaLibraryConfig, *, logger: logging.Logger) -> int:
     """Run the media sync facade once and return an exit status."""
     if not config.source_dir.exists():
         message = f"Error: source directory does not exist: {config.source_dir}"
-        print(message, file=sys.stderr)
         logger.error(message)
         return 1
 
     if not config.dest_dir.exists():
         message = f"Error: destination directory does not exist: {config.dest_dir}"
-        print(message, file=sys.stderr)
         logger.error(message)
         return 1
 
@@ -599,7 +596,6 @@ def main() -> int:
         with FileLock(config.lock_file):
             return run_job(config, logger=logger)
     except AlreadyLockedError:
-        print("Another instance is already running. Exiting.")
         logger.warning("Another instance is already running. Exiting.")
         return 0
     finally:

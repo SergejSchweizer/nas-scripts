@@ -17,7 +17,7 @@ DEFAULT_TEMP_DIR = Path("/volume1/Temp/Fotos")
 DEFAULT_DOWNLOADS_TEMP_DIR = Path("/volume1/Temp/Downloads")
 DEFAULT_LOCK_FILE = Path("/tmp/organize_temp_media.lock")
 DEFAULT_DOWNLOADS_LOCK_FILE = Path("/tmp/organize_temp_downloads.lock")
-DEFAULT_LOG_DIR = Path("/volume1/Temp/.logs")
+DEFAULT_LOG_DIR = Path(".logs")
 DEFAULT_CONFLICT_POLICY = "overwrite"
 DEFAULT_DESTINATION_LAYOUT = "categorized"
 DEFAULT_DOWNLOADS_DESTINATION_LAYOUT = "month_only"
@@ -94,7 +94,7 @@ def _load_organize_temp_config(
         script_name=script_name,
         temp_dir=env_path(os.environ.get("TEMP_DIR"), default_temp_dir),
         lock_file=env_path(os.environ.get("LOCK_FILE"), default_lock_file),
-        log_dir=env_path(os.environ.get("LOG_DIR"), DEFAULT_LOG_DIR),
+        log_dir=DEFAULT_LOG_DIR,
         reorganize_existing=_parse_bool_env(os.environ.get("REORGANIZE_EXISTING")),
         file_extensions=_parse_csv_env(
             os.environ.get("FILE_EXTENSIONS"),

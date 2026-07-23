@@ -28,6 +28,8 @@ This repository contains three NAS commands:
 Install dependencies and run the test suite:
 
 ```bash
+git clone https://github.com/SergejSchweizer/scripts.git /home/dev_scripts/scripts
+cd /home/dev_scripts/scripts
 . .venv/bin/activate
 python -m pip install -e .[dev]
 .venv/bin/pytest -q
@@ -280,18 +282,25 @@ python -m scripts organize-temp-downloads
 
 ### Cron Examples
 
-Media sync:
+The canonical schedule is versioned in `cron/scripts.crontab`. Install it for
+the current user with:
 
 ```bash
-*/5 * * * * cd /path/to/scripts && /path/to/scripts/.venv/bin/python -m scripts sync-media-library
+cd /home/dev_scripts/scripts
+crontab cron/scripts.crontab
 ```
 
-Temp organizer:
+The installed entries use the renamed repository and module paths:
 
 ```bash
-15 23 * * * cd /path/to/scripts && /path/to/scripts/.venv/bin/python -m scripts organize-temp-photos
-30 23 * * * cd /path/to/scripts && /path/to/scripts/.venv/bin/python -m scripts organize-temp-downloads
+55 23 * * * cd "/home/dev_scripts/scripts" && LOCK_FILE="/home/dev_scripts/scripts/.locks/organize-temp-photos.lock" "/home/dev_scripts/scripts/.venv/bin/python" -m scripts organize-temp-photos
+15 21 * * * cd "/home/dev_scripts/scripts" && LOCK_FILE="/home/dev_scripts/scripts/.locks/organize-temp-downloads.lock" "/home/dev_scripts/scripts/.venv/bin/python" -m scripts organize-temp-downloads
+0 */3 * * * cd "/home/dev_scripts/scripts" && LOCK_FILE="/home/dev_scripts/scripts/.locks/sync-media-library.lock" "/home/dev_scripts/scripts/.venv/bin/python" -m scripts sync-media-library
 ```
+
+If the repository is installed elsewhere, update the `SCRIPTS_PROJECT`,
+`SCRIPTS_PYTHON`, and lock-file variables in `cron/scripts.crontab` before
+installing it.
 
 ## System Dependencies
 
@@ -331,12 +340,9 @@ git config core.hooksPath .githooks
 
 The pre-commit hook runs:
 
-- `ruff check --fix .`
+- `ruff check src tests`
 - `mypy`
 - `pytest -q`
-
-Because Ruff runs in `--fix` mode, it may modify files before the commit
-completes. If that happens, review/stage the changes and commit again.
 
 ## Testing
 
